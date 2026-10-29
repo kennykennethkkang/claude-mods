@@ -76,26 +76,31 @@ test('posts this chat to Switchboard with its token', async ($, on) => {
   expect(live[1]).toContain('"token":"tok2"')
 })
 
-test('an inbox message becomes this chat\'s next prompt, Remote Control a command', async ($, on) => {
-  const prompts: string[] = []
+test('an inbox item for Remote Control runs its command', async ($, on) => {
   const commands: string[] = []
-  on('prompt.submit', (_, e) => { prompts.push(e.text); return { text: e.text } })
   on('command.run', (_, e) => { commands.push(e.command); return { text: '' } })
-  const posts: string[] = []
-  on('session.id', () => ({ value: 'chat-1' }))
-  on('env.get', () => ({ value: '/Users/k' }))
-  on('clock.now', () => ({ value: 9e12 }))
-  on('fs.list', () => ({ value: [{ name: 'abc-123.json', kind: 'file', size: 10, mtimeMs: 0, isLink: false }] }))
-  on('fs.read', () => ({ value: JSON.stringify({ port: 61712, pid: 1, workspace: '/Users/k/Documents/GitHub/Armasu', hubToken: 'tok' }) }))
-  on('http.fetch', (_, e) => { posts.push(String(e.init?.body ?? '')); return { value: { status: 204, ok: true, headers: {}, text: '' } } })
-  on('session.start', (_, e) => ({ cwd: e.cwd }))
-  await $.session.start({ cwd: '/Users/k/Documents/GitHub/Armasu', surface: 'terminal', isInteractive: true })
   // A compaction needs the chat's own messages, which only a live session has; checked end to end instead.
-  await deliver($ as unknown as EngineInterface, [{ id: 'i1', kind: 'prompt', text: 'run the tests' }, { id: 'i2', kind: 'rc' }])
-  expect(prompts).toEqual(['run the tests'])
+  await deliver($ as unknown as EngineInterface, [{ id: 'i2', kind: 'rc' }])
   expect(commands).toEqual(['remote-control'])
-  // Every window hears it, so the one holding the chat's terminal shows it.
-  expect(posts.filter(p => p.includes('"kind":"prompted"') && p.includes('"sessionId":"chat-1"')).length).toBe(1)
+})
+
+test('an inbox message becomes this chat\'s next prompt and tells every window, so the one holding its terminal shows it', async () => {
+  const posts: string[] = []
+  const prompts: string[] = []
+  const $ = {
+    prompt: { submit: async ({ text }: { text: string }) => { prompts.push(text); return {} } },
+    env: { get: async () => '/u' },
+    session: { id: async () => 'chat-1' },
+    clock: { now: async () => 9.9e12 },
+    fs: {
+      list: async () => [{ name: 'a-1.json', kind: 'file' }, { name: 'b-2.json', kind: 'file' }],
+      read: async (p: string) => JSON.stringify({ port: p.endsWith('a-1.json') ? 1 : 2, workspace: '/u', hubToken: 't' }),
+    },
+    http: { fetch: async (url: string, init: { body: string }) => { posts.push(`${url} ${init.body}`); return { status: 204, ok: true } } },
+  } as unknown as EngineInterface
+  await deliver($, [{ id: 'i1', kind: 'prompt', text: 'run the tests' }])
+  expect(prompts).toEqual(['run the tests'])
+  expect(posts.filter(p => p.includes('"kind":"prompted"') && p.includes('"sessionId":"chat-1"')).length).toBe(2)
 })
 
 test('reads the OpenRouter balance wherever it is printed', () => {
