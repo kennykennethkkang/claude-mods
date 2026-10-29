@@ -88,6 +88,8 @@ test('an inbox message becomes this chat\'s next prompt, Remote Control a comman
   on('fs.list', () => ({ value: [{ name: 'abc-123.json', kind: 'file', size: 10, mtimeMs: 0, isLink: false }] }))
   on('fs.read', () => ({ value: JSON.stringify({ port: 61712, pid: 1, workspace: '/Users/k/Documents/GitHub/Armasu', hubToken: 'tok' }) }))
   on('http.fetch', (_, e) => { posts.push(String(e.init?.body ?? '')); return { value: { status: 204, ok: true, headers: {}, text: '' } } })
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  await $.session.start({ cwd: '/Users/k/Documents/GitHub/Armasu', surface: 'terminal', isInteractive: true })
   // A compaction needs the chat's own messages, which only a live session has; checked end to end instead.
   await deliver($ as unknown as EngineInterface, [{ id: 'i1', kind: 'prompt', text: 'run the tests' }, { id: 'i2', kind: 'rc' }])
   expect(prompts).toEqual(['run the tests'])
