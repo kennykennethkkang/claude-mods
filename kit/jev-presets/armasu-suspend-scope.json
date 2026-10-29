@@ -1,0 +1,23 @@
+{
+  "name": "armasu-suspend-scope",
+  "version": 1,
+  "description": "Sort Armasu Social write routes by what a suspended account may still do: refuse what it starts toward other people, keep its answers, its own cleanup and its safety tools",
+  "model": "typesafe/jev-1.13",
+  "state_fields": ["method", "route", "note"],
+  "display_fields": ["method", "route"],
+  "questions": {
+    "scope": {
+      "type": "choice",
+      "instructions": "Read `note`, which says what the route at `route` does when called with `method`. Judge the write from the caller's side. The cue is who started it and who sees the result: the caller starting something other people see or are told about, the caller answering something another person started, the caller changing only their own private things, or the caller protecting themselves.",
+      "criteria": {
+        "starts_contact": "The caller creates, sends or changes something other people see or are told about, on the caller's own initiative: posting or editing a look or a comment, a like, a rating, a ring, showing a piece on a profile, a follow or friend request, a size request, sending a gift, asking to borrow, claiming a public handle.",
+        "responds": "The caller answers or finishes something another person started or that is already under way between them: accepting or declining a follow, friend, size, loan or gift request, returning a borrowed piece, marking a gift arrived, cancelling or withdrawing a pending request or gift.",
+        "own_only": "The caller changes or removes only their own things and nothing new becomes visible to anyone: deleting their own look, comment, rating or ring, private settings such as comments or ratings on their look, their saved addresses, their invite link, marking their notes read, saving a piece to their own list.",
+        "safety": "The caller protects themselves from another person: blocking, unblocking, reporting, unfollowing, removing a follower, ending a friendship, revoking a size share.",
+        "other": "The note describes a write none of the labels above cover, or it is too vague to tell who starts it or who sees it."
+      }
+    }
+  },
+  "thresholds": { "scope": 0.7 },
+  "rules": []
+}

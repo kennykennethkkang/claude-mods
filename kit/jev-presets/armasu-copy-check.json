@@ -1,0 +1,20 @@
+{
+  "name": "armasu-copy-check",
+  "version": 1,
+  "description": "Check one piece of Armasu interface copy against the house writing rules and for whether the person reading it understands it where it shows",
+  "model": "typesafe/jev-1.13",
+  "state_fields": ["rules", "where", "reader", "text"],
+  "display_fields": ["_id"],
+  "questions": {
+    "follows_rules": {
+      "type": "noul",
+      "instructions": "Does `text` obey every rule in `rules`? One broken rule means no."
+    },
+    "clear": {
+      "type": "noul",
+      "instructions": "Would `reader`, seeing `text` at `where`, understand what happened or what is being asked, and what they can do next when there is something to do, without knowing how the app works inside?"
+    }
+  },
+  "thresholds": { "follows_rules": { "low": 0.2, "high": 0.8 }, "clear": { "low": 0.2, "high": 0.8 } },
+  "rules": []
+}

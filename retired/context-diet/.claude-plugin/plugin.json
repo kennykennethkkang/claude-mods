@@ -1,0 +1,1 @@
+{ "name": "context-diet", "version": "0.1.0", "description": "/diet ranks what loads on every call and names the plugins you have not used lately", "types": "./types/index.d.ts" }

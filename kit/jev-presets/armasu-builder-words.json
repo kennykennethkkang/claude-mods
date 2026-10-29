@@ -1,0 +1,16 @@
+{
+  "name": "armasu-builder-words",
+  "version": 1,
+  "description": "Find Armasu interface sentences that use a word only the people who build or run the app would use, where a shopper expects everyday words",
+  "model": "typesafe/jev-1.13",
+  "state_fields": ["text"],
+  "display_fields": ["_id"],
+  "questions": {
+    "builder_word": {
+      "type": "noul",
+      "instructions": "`text` is a sentence shown to shoppers in a wardrobe and shopping app. Does it use a word or phrase that only someone who built or runs the app would say, where a shopper expects an everyday word? Builder words include: logic, refusal, payload, endpoint, route, flag, cookie, snapshot, null, sync, backend, query, cache, fallback, config, schema, id, stub, server, session, token, request body, status code, override. The app's own product words are fine and are not builder words: closet, wishlist, tray, try-on slot, slot, fit, Fit of the Day, look, piece, handle, ring, render, bag, beta, invite."
+    }
+  },
+  "thresholds": { "builder_word": { "low": 0.2, "high": 0.8 } },
+  "rules": []
+}

@@ -1,0 +1,1 @@
+{ "name": "dev-servers", "version": "0.1.0", "description": "/servers lists what listens on localhost for dev work, with Open and Stop", "types": "./types/index.d.ts" }

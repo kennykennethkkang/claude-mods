@@ -1,0 +1,16 @@
+{
+  "name": "armasu-plan-coverage",
+  "version": 1,
+  "description": "Check that an Armasu implementation plan builds each requirement of its spec, one requirement per item, the whole plan in state",
+  "model": "typesafe/jev-1.13",
+  "state_fields": ["requirement", "plan"],
+  "display_fields": ["requirement"],
+  "questions": {
+    "covered": {
+      "type": "noul",
+      "instructions": "Does `plan` contain a task or step that builds what `requirement` describes, naming the file, route, function or component that does it, so that an engineer following `plan` alone would build it?"
+    }
+  },
+  "thresholds": { "covered": { "low": 0.2, "high": 0.8 } },
+  "rules": []
+}

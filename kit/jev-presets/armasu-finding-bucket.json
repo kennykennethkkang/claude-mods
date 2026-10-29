@@ -1,0 +1,24 @@
+{
+  "name": "armasu-finding-bucket",
+  "version": 1,
+  "description": "Sort Armasu review findings into the four change buckets the owner allowed (bug, speed, a11y, ux) or out, which needs a look, copy or feature change",
+  "model": "typesafe/jev-1.13",
+  "state_fields": ["where", "width_theme", "what", "evidence"],
+  "display_fields": ["where", "what"],
+  "questions": {
+    "bucket": {
+      "type": "choice",
+      "instructions": "Read `what` and `evidence` for a finding on the page in `where`. Decide which kind of change fixes it. The cue is what the fix touches: wrong behaviour, bytes, readability or input, a missing state, or the design itself.",
+      "criteria": {
+        "bug": "The page or route does something other than what its own code or label says: wrong data shown, a stored value not read back, a control that does nothing, a crash, a label that is a raw internal value. The fix changes behaviour only where it was wrong.",
+        "speed": "The page sends more bytes or requests than it needs, or does repeated work, and nothing the user sees would change once fixed: image sizes, bundle size, duplicate fetches, unbounded memory.",
+        "a11y": "Text or a control cannot be read or operated by everyone: contrast, a clipped or truncated label, text under the 11px floor, focus order, a missing accessible name, a touch target too small, motion that ignores a reduced-motion setting.",
+        "ux": "A state is missing or wrong while the layout stays the same: no loading, empty, error or disabled state, a notice that covers a control, a scrollable strip with no hint that it scrolls, a keyboard path that stops.",
+        "out": "Fixing it would change the layout, colours, type, copy or a feature, or the finding describes behaviour that is correct by design, or it is a note rather than a defect."
+      }
+    }
+  },
+  "thresholds": {
+    "bucket": 0.7
+  }
+}

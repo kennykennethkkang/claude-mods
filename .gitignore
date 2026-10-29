@@ -1,0 +1,24 @@
+.DS_Store
+node_modules/
+
+# Secrets: never commit keys, tokens or env files
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa*
+*.secret
+secrets/
+credentials*.json
+.npmrc
+.netrc
+
+# Local output and backups
+*.log
+*.before-kit
+*.bad-*
+.playwright-mcp/
+coverage/

@@ -1,0 +1,170 @@
+{
+  "version": 1,
+  "exportedAt": "2026-10-28T23:01:57.915Z",
+  "marketplaces": {
+    "claude-code-plugins": {
+      "source": "git",
+      "url": "https://github.com/anthropics/claude-code.git",
+      "sparsePaths": [
+        ".claude-plugin",
+        "plugins",
+        "marketplace"
+      ]
+    },
+    "superpowers-dev": {
+      "source": "git",
+      "url": "https://github.com/obra/superpowers.git"
+    },
+    "claude-plugins-official": {
+      "source": "github",
+      "repo": "anthropics/claude-plugins-official"
+    },
+    "google-labs-code-stitch-skills": {
+      "source": "github",
+      "repo": "google-labs-code/stitch-skills"
+    },
+    "ponytail": {
+      "source": "github",
+      "repo": "DietrichGebert/ponytail"
+    },
+    "impeccable": {
+      "source": "github",
+      "repo": "pbakaus/impeccable"
+    },
+    "i-have-adhd": {
+      "source": "github",
+      "repo": "ayghri/i-have-adhd"
+    },
+    "bland": {
+      "source": "github",
+      "repo": "CINTELLILABS/bland-plugins"
+    },
+    "kenneth-mods": {
+      "source": "kit"
+    },
+    "marketingskills": {
+      "source": "github",
+      "repo": "coreyhaines31/marketingskills"
+    },
+    "openai-codex": {
+      "source": "github",
+      "repo": "openai/codex-plugin-cc"
+    }
+  },
+  "plugins": {
+    "impeccable@impeccable": true,
+    "superpowers@superpowers-dev": true,
+    "frontend-design@claude-plugins-official": true,
+    "code-review@claude-plugins-official": true,
+    "code-simplifier@claude-plugins-official": true,
+    "claude-md-management@claude-plugins-official": true,
+    "security-guidance@claude-plugins-official": true,
+    "typescript-lsp@claude-plugins-official": true,
+    "security-guidance@claude-code-plugins": false,
+    "context7@claude-plugins-official": true,
+    "playwright@claude-plugins-official": true,
+    "stitch-build@google-labs-code-stitch-skills": false,
+    "stitch-design@google-labs-code-stitch-skills": false,
+    "stitch-utilities@google-labs-code-stitch-skills": false,
+    "auth0@claude-plugins-official": false,
+    "aws-core@claude-plugins-official": true,
+    "ponytail@ponytail": true,
+    "i-have-adhd@i-have-adhd": true,
+    "bland@bland": true,
+    "usage-meter@kenneth-mods": true,
+    "repo-rules@kenneth-mods": true,
+    "paid-guard@kenneth-mods": true,
+    "marketing-skills@marketingskills": true,
+    "codex@openai-codex": true
+  },
+  "settings": {
+    "model": "opus",
+    "theme": "dark",
+    "tui": "fullscreen",
+    "autoMode": {
+      "environment": [
+        "### Org-wide",
+        "**Organization**: None configured",
+        "**Cloud provider(s)**: AWS (Secrets Manager reference found in config scan)",
+        "**Repository visibility**: not queryable here — assume private per shipped default (github.com/kennykennethkkang/Armasu)",
+        "**Internal sharing / snippet hosting**: None configured — treat public paste/gist services as outside the trust boundary",
+        "**Secrets management**: AWS Secrets Manager (marker found in config scan)",
+        "**Default / protected branches**: Default branch is MVP-main; protected-branch status not queryable here",
+        "**CI/CD deploy targets**: None configured",
+        "**Network posture**: None configured",
+        "**Host containment**: None configured — assume Claude Code runs on an ordinary developer machine with open internet",
+        "**Source control**: The trusted repo (github.com/kennykennethkkang/Armasu) and its remote(s) only",
+        "**Trusted internal domains**: None configured",
+        "**Trusted cloud buckets**: None configured",
+        "**Key internal services**: None configured",
+        "**Internal package registry**: None configured",
+        "**Sensitive data locations & audiences**: .env.local, app/lib/outfit-retention.ts, tests/outfit-retention.test.ts, and any file/store holding personal data, confidential business data, credentials, or regulated data; share only with audiences cleared at the [named+specifics] bar",
+        "**Data retention / declassification**: None configured",
+        "**Sensitive remote targets**: any namespace, host, or container whose name carries `prod` or `production` as a whole word or name segment",
+        "**Protected deployment namespaces / environments**: None configured — fall back to the Sensitive remote targets heuristic",
+        "**Protected IaC scopes**: IAM, RBAC, networking, quota, and node-pool resources; anything whose name or tag carries `prod` or `production` as a whole word or name segment",
+        "### User-specific",
+        "**Primary use of Claude Code**: software development (wardrobe planning / Next.js app — Armasu)",
+        "**Trusted repo**: github.com/kennykennethkkang/Armasu (this repo, working directory and its configured remote) — visibility not queryable here, treat as private per shipped default",
+        "**Org-specific CLIs**: None configured",
+        "routine under kennykennethkkang/Armasu prefix: git operations, npm/npx scripts, sqlite3, lsof for local dev, scoped to this repo only"
+      ]
+    },
+    "agentPushNotifEnabled": true,
+    "inputNeededNotifEnabled": true,
+    "autoCompactWindow": 400000,
+    "idleCompaction": false,
+    "autoContinueAtUsageLimit": true,
+    "remoteControlAtStartup": true,
+    "statusLine": {
+      "type": "command",
+      "command": "node <KIT>/statusline.mjs"
+    }
+  },
+  "skills": [
+    "accessible-motion",
+    "claude-x-jev",
+    "extract-design-md",
+    "extract-static-html",
+    "gsap-greensock",
+    "gsap-scrolltrigger",
+    "hover-interactions",
+    "image-to-code-skill",
+    "page-transitions",
+    "phone",
+    "scroll-animations",
+    "skill-inspector",
+    "taste-design",
+    "web-design-guidelines"
+  ],
+  "skillsArchived": [
+    "3d-spatial",
+    "aws-sdk-js-v3-usage",
+    "aws-secrets-manager",
+    "aws-storage",
+    "build-threejs-scroll-worlds",
+    "drei",
+    "r3f-best-practices",
+    "react-three-fiber",
+    "three-best-practices",
+    "threejs-webgl"
+  ],
+  "jevPresets": [
+    "armasu-builder-words.json",
+    "armasu-copy-check.json",
+    "armasu-finding-bucket.json",
+    "armasu-plan-coverage.json",
+    "armasu-route-release.json",
+    "armasu-route-security.json",
+    "armasu-suspend-scope.json"
+  ],
+  "agents": [
+    "Explore.md",
+    "designer.md",
+    "engineer.md",
+    "growth.md",
+    "ops.md",
+    "qa.md",
+    "researcher.md"
+  ]
+}

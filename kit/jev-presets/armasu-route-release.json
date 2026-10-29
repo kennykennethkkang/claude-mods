@@ -1,0 +1,48 @@
+{
+  "name": "armasu-route-release",
+  "description": "Sort Armasu page routes by who can reach them and whether they are finished, to decide which may appear in public screenshots",
+  "model": "typesafe/jev-1.13",
+  "state_fields": [
+    "route",
+    "linked_from",
+    "admin_checks",
+    "signed_out_allowed",
+    "source"
+  ],
+  "display_fields": [
+    "route"
+  ],
+  "questions": {
+    "audience": {
+      "type": "choice",
+      "instructions": "Who reaches this page in normal use? Read `linked_from`, `admin_checks` and `signed_out_allowed` first, then `source`.",
+      "criteria": {
+        "any_signed_in_user": "Some file in `linked_from` is ordinary navigation (sidebar, footer, profile tabs, a page button) and `admin_checks` is none or only hides extra controls inside the page",
+        "admin_only": "The page itself refuses non admins: `admin_checks` names isAdminEmail, showFotdPopup or an /api/admin route that the page depends on to render anything",
+        "signed_out_visitor": "`signed_out_allowed` is yes and the page is a sign in, access gate or phone pairing screen",
+        "unreachable": "`linked_from` says nothing links here, or the only links are from admin pages or from files that are not navigation"
+      },
+      "exhaustive": true
+    },
+    "finished": {
+      "type": "noul",
+      "instructions": "Does `source` render a working feature built on the signed in user's real data or real API calls, rather than a coming soon notice, hard coded example arrays, or a developer test harness?"
+    },
+    "fake_data": {
+      "type": "noul",
+      "instructions": "Does `source` show hard coded sample content (example notifications, example outfits, made up follower counts, placeholder emoji) as if it were real?"
+    }
+  },
+  "thresholds": {
+    "audience": 0.7,
+    "finished": {
+      "low": 0.2,
+      "high": 0.8
+    },
+    "fake_data": {
+      "low": 0.2,
+      "high": 0.8
+    }
+  },
+  "rules": []
+}

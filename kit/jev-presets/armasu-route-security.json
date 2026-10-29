@@ -1,0 +1,28 @@
+{
+  "name": "armasu-route-security",
+  "version": 1,
+  "description": "Sort one Armasu Next.js API route handler by security risk, so a person reads the risky ones in full",
+  "model": "typesafe/jev-1.13",
+  "state_fields": ["route", "code"],
+  "display_fields": ["_id"],
+  "questions": {
+    "other_users_rows": {
+      "type": "noul",
+      "instructions": "Does `code` take an id, handle or key from the request (params, query or body) and use it to read, change or delete a database row that could belong to a different person? Answer yes even if an ownership or visibility check is present; answer no only when every row it touches is chosen by the signed in user's own id."
+    },
+    "ownership_checked": {
+      "type": "noul",
+      "instructions": "For every row in `code` that is chosen by an id, handle or key from the request, is there a check in the same SQL (such as user_id = ?) or in a helper called just before (such as a visibility or ownership function) that the signed in user owns that row or may see it? If no row is chosen from the request, answer yes."
+    },
+    "spends_money": {
+      "type": "noul",
+      "instructions": "Does `code` call a paid outside service on a request (Gemini, Channel3 search or product lookups, The New Black renders, Amazon SES email, OpenRouter), directly or through a helper whose name says so?"
+    }
+  },
+  "thresholds": {
+    "other_users_rows": { "low": 0.2, "high": 0.8 },
+    "ownership_checked": { "low": 0.2, "high": 0.8 },
+    "spends_money": { "low": 0.2, "high": 0.8 }
+  },
+  "rules": []
+}
