@@ -34,9 +34,9 @@ Apply Disney's 12 animation principles to route changes, view transitions, and n
 
 **Straight Ahead vs Pose to Pose**: Shared element transitions morph continuously (straight ahead). Crossfades swap between discrete states (pose to pose). Choose based on content relationship.
 
-**Follow Through & Overlapping**: Page content settles after initial position. Staggered content entry—header, then body, then footer. Images load with subtle fade after container.
+**Follow Through & Overlapping**: Page content settles after initial position. Staggered content entry: header, then body, then footer. Images load with subtle fade after container.
 
-**Slow In / Slow Out**: Exit: ease-in (accelerate away). Enter: ease-out (decelerate in). Combined: ease-in-out for shared elements. Never linear—feels broken.
+**Slow In / Slow Out**: Exit: ease-in (accelerate away). Enter: ease-out (decelerate in). Combined: ease-in-out for shared elements. Never linear, feels broken.
 
 **Arc**: Slide transitions can curve slightly. Stack navigation implies z-depth. Circular reveals expand from trigger point.
 
@@ -44,7 +44,7 @@ Apply Disney's 12 animation principles to route changes, view transitions, and n
 
 **Timing**: Quick transitions: 200-300ms. Standard: 300-400ms. Complex: 400-500ms. Modal/sheet: 250-350ms. Back navigation often faster than forward.
 
-**Exaggeration**: Save exaggeration for key moments—onboarding, achievement. Regular navigation should be smooth, not theatrical. Users navigate frequently.
+**Exaggeration**: Save exaggeration for key moments: onboarding, achievement. Regular navigation should be smooth, not theatrical. Users navigate frequently.
 
 **Solid Drawing**: Maintain consistent spatial metaphor. If pages stack, maintain z-order. If pages slide, direction should be consistent. Users build mental model from transitions.
 
@@ -118,8 +118,8 @@ document.startViewTransition(() => {
 | Crossfade | 200-300ms | ease-in | ease-out |
 | Slide forward | 300-400ms | ease-in | ease-out |
 | Slide back | 250-350ms | ease-in | ease-out |
-| Modal open | 250-350ms | — | ease-out |
-| Modal close | 200-300ms | ease-in | — |
+| Modal open | 250-350ms | none | ease-out |
+| Modal close | 200-300ms | ease-in | none |
 | Shared element | 300-400ms | n/a | ease-in-out |
 | Tab switch | 150-200ms | instant | ease-out |
 
@@ -138,5 +138,5 @@ document.startViewTransition(() => {
 1. Use `transform` and `opacity` only
 2. Hardware acceleration: `will-change: transform`
 3. Reduce motion: instant transitions
-4. Test on slow devices—transitions must not block
+4. Test on slow devices, transitions must not block
 5. View Transitions API: native performance

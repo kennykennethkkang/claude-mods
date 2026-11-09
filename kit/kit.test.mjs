@@ -2,7 +2,7 @@
 // settings merge, and which files never leave this machine.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { DENY, exportManifest, newestVsix, isSecretFile, launchAgent, mergeSettings, oldRcPids, planSetup, RC_NAME, rcArgs, rcExitNote, rcPattern, rulesAction, rulesTargets, staleRc, withDeny, withTrust } from './kit.mjs'
+import { codexAgent, CODEX_AGENT_HEADER, procs, DENY, exportManifest, keyLine, newestVsix, isSecretFile, launchAgent, rcLogin, rcPath, rcSpawn, startupVbs, mergeSettings, oldRcPids, planSetup, RC_NAME, rcArgs, rcExitNote, rcPattern, rulesAction, rulesTargets, staleRc, withDeny, withTrust } from './kit.mjs'
 
 const settings = {
   model: 'opus', theme: 'dark', autoCompactWindow: 200000, remoteControlAtStartup: true,
@@ -85,6 +85,7 @@ test('rules never downgrade newer generated rules', () => {
 test('deny list merged once, existing entries kept', () => {
   const s = withDeny({ permissions: { deny: ['Bash(curl:*)'], defaultMode: 'bypassPermissions' } })
   assert.equal(s.permissions.defaultMode, 'bypassPermissions')
+  assert.equal(s.skipDangerousModePermissionPrompt, true)
   assert.deepEqual(s.permissions.deny, ['Bash(curl:*)', ...DENY])
   assert.deepEqual(withDeny(s).permissions.deny, s.permissions.deny)
 })
@@ -147,6 +148,18 @@ test('repos are marked trusted, other project settings kept, nothing else touche
 test('a server started before bypass mode is restarted', () => {
   assert.ok(staleRc('claude remote-control --name A --spawn worktree --permission-mode acceptEdits'))
   assert.ok(!staleRc('claude remote-control --name A --spawn worktree --permission-mode bypassPermissions'))
+  // cmd.exe wraps the command in quotes on Windows.
+  assert.ok(!staleRc('C:\\Windows\\system32\\cmd.exe /d /s /c "claude remote-control --name A --permission-mode bypassPermissions"'))
+})
+
+test('procs reads pgrep on macOS and filters PowerShell command lines on Windows', () => {
+  const calls = []
+  const run = out => (cmd, args) => { calls.push(cmd); return { stdout: out } }
+  assert.equal(procs(rcPattern('Mac'), 'darwin', run('12 claude remote-control --name Mac\n')), '12 claude remote-control --name Mac\n')
+  const ps = '4 \r\n12 C:\\Windows\\system32\\cmd.exe /d /s /c "claude remote-control --name Mac --spawn same-dir"\r\n13 "node.exe" "cli.js" remote-control --name Mac --spawn same-dir\r\n14 claude remote-control --name MacBook\r\n'
+  assert.equal(procs(rcPattern('Mac'), 'win32', run(ps)), '12 C:\\Windows\\system32\\cmd.exe /d /s /c "claude remote-control --name Mac --spawn same-dir"\n13 "node.exe" "cli.js" remote-control --name Mac --spawn same-dir')
+  assert.deepEqual(calls, ['pgrep', 'powershell'])
+  assert.equal(procs(rcPattern('Mac'), 'win32', () => ({ stdout: null })), '')
 })
 
 test('role subagents travel: an export lists the .md files, a setup installs them', () => {
@@ -163,4 +176,46 @@ test('the newest vsix is picked by version, not by name', () => {
   assert.equal(newestVsix(['manifest.json']), undefined)
   assert.equal(newestVsix(['switchboard-0.17.9-beta.vsix', 'switchboard-x.vsix', 'switchboard-1.0.vsix']), undefined)
   assert.equal(newestVsix(['switchboard-0.17.9-beta.vsix', 'switchboard-0.1.0.vsix']), 'switchboard-0.1.0.vsix')
+})
+
+test('rcPath joins with the OS delimiter and adds where claude lives there', () => {
+  assert.equal(rcPath('darwin', { home: '/h', execDir: '/n/bin', PATH: '/usr/bin' }), '/h/.local/bin:/n/bin:/usr/bin')
+  assert.equal(rcPath('win32', { home: 'C:\\Users\\k', execDir: 'C:\\Program Files\\nodejs', PATH: 'C:\\Windows', appData: 'C:\\Users\\k\\AppData\\Roaming' }),
+    'C:\\Users\\k\\.local\\bin;C:\\Users\\k\\AppData\\Roaming\\npm;C:\\Program Files\\nodejs;C:\\Windows')
+})
+
+test('rcSpawn runs claude.cmd through a shell on Windows only, hidden', () => {
+  assert.deepEqual(rcSpawn('darwin'), { shell: false, windowsHide: true })
+  assert.deepEqual(rcSpawn('win32'), { shell: true, windowsHide: true })
+})
+
+test('startupVbs starts rc-servers.mjs hidden at login', () => {
+  const vbs = startupVbs('C:\\Program Files\\nodejs\\node.exe', 'C:\\Users\\k\\GitHub\\claude-mods\\kit\\rc-servers.mjs')
+  assert.equal(vbs, 'CreateObject("WScript.Shell").Run """C:\\Program Files\\nodejs\\node.exe"" ""C:\\Users\\k\\GitHub\\claude-mods\\kit\\rc-servers.mjs""", 0, False\r\n')
+})
+
+test('rcLogin names the login item per OS', () => {
+  assert.equal(rcLogin('darwin', '/h', {}), 'LaunchAgent /h/Library/LaunchAgents/com.kenneth.switchboard.rc.plist')
+  assert.equal(rcLogin('win32', 'C:\\Users\\k', { APPDATA: 'C:\\A' }), 'Startup item C:\\A\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\switchboard-rc.vbs')
+  assert.equal(rcLogin('linux', '/h', {}), undefined)
+})
+
+test('a key line points to Switchboard, never ~/.zshrc, and never shows the key', () => {
+  assert.equal(keyLine('Gemini', 'GEMINI_API_KEY', { GEMINI_API_KEY: 'AIzaSecret' }, () => false), 'Gemini: GEMINI_API_KEY found')
+  assert.equal(keyLine('Gemini', 'GEMINI_API_KEY', {}, n => n === 'GEMINI_API_KEY'), 'Gemini: key saved in Switchboard')
+  const missing = keyLine('Jev', 'OPENROUTER_API_KEY', {}, () => false)
+  assert.match(missing, /Settings, Accounts, API keys/)
+  assert.doesNotMatch(missing, /zshrc/)
+})
+
+test('codexAgent turns a Claude agent .md into a Codex role TOML', () => {
+  const md = '---\nname: qa\ndescription: "Tests the \\"change\\""\nmodel: opus\nmaxTurns: 40\n---\n\nRun the suite.\nSay C:\\path\x7f\n'
+  const toml = codexAgent(md)
+  assert.ok(toml.startsWith(CODEX_AGENT_HEADER))
+  assert.match(toml, /^name = "qa"$/m)
+  assert.match(toml, /^description = "Tests the \\"change\\""$/m)
+  assert.match(toml, /^developer_instructions = "Run the suite.\\nSay C:\\\\path\\u007f"$/m)
+  assert.doesNotMatch(toml, /model|maxTurns|\x7f/)
+  assert.match(codexAgent(md, 'ecc-'), /^name = "ecc-qa"$/m)
+  assert.equal(codexAgent('no frontmatter'), undefined)
 })

@@ -26,6 +26,7 @@ import csv
 import io
 import json
 import os
+import subprocess
 import sys
 import time
 import urllib.error
@@ -94,11 +95,31 @@ def live_row(row, display):
     return out
 
 
+def saved_key(name):
+    """The key Switchboard's Sign-ins saved: the macOS Keychain, else ~/.claude/switchboard/keys/NAME."""
+    try:
+        r = subprocess.run(["security", "find-generic-password", "-s", "switchboard", "-a", name, "-w"], capture_output=True, text=True, timeout=10)
+        if r.returncode == 0 and r.stdout.strip():
+            return r.stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        pass
+    try:
+        with open(os.path.join(os.path.expanduser("~"), ".claude", "switchboard", "keys", name)) as f:
+            return f.read().strip()
+    except OSError:
+        return ""
+
+
+def env_key():
+    """OPENROUTER_API_KEY from the env first, else the saved one."""
+    return os.environ.get("OPENROUTER_API_KEY", "").strip() or saved_key("OPENROUTER_API_KEY")
+
+
 def api_key():
-    key = os.environ.get("OPENROUTER_API_KEY", "").strip()
+    key = env_key()
     if not key:
         die(
-            "OPENROUTER_API_KEY is not set. Run /jev-setup, or:\n"
+            "OPENROUTER_API_KEY is not set. Paste it in Switchboard (Settings, Accounts, API keys), run /jev-setup, or:\n"
             "       export OPENROUTER_API_KEY=sk-or-...   (key from https://openrouter.ai/settings/keys)"
         )
     return key
@@ -547,7 +568,7 @@ def cmd_gate(args):
     """
     preset = load_preset(args.preset)
     hook_mode = args.hook
-    if hook_mode and not os.environ.get("OPENROUTER_API_KEY", "").strip():
+    if hook_mode and not env_key():
         sys.stderr.write("[jev gate] OPENROUTER_API_KEY not set; leaving the normal permission prompt in place\n")
         sys.exit(0)
     try:

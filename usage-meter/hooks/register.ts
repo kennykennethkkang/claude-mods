@@ -10,6 +10,7 @@ type InboxItem = { id: string; kind: 'prompt'; text: string } | { id: string; ki
 const POST_EVERY_MS = 5_000
 const POLL_MS = 2_000
 const REDISCOVER_MS = 30_000
+const FETCH_MS = 2_000
 
 export const norm = (p: string) => p.replace(/\\/g, '/').replace(/\/+$/, '')
 
@@ -74,6 +75,13 @@ export function dietOf(b: SessionContextBreakdown, uses: Record<string, number>)
 export async function deliver($: EngineInterface, items: InboxItem[]) {
   for (const item of items) {
     if (item.kind === 'prompt') {
+      if (item.text.startsWith(HUB_RESUME)) {
+        // Resumed here already: one turn, not two. Switchboard first: the hold lifts with it.
+        await loadHold($)
+        const now = await $.clock.now()
+        if (held.resumedAt !== undefined && now - held.resumedAt < RESUME_DEDUP_MS) continue
+        if (held.hold) await liftHold($, now)
+      }
       await $.prompt.submit({ text: item.text, asUser: true })
       // The window holding this chat's terminal brings it up.
       await post($, { kind: 'prompted', sessionId: await $.session.id() })
@@ -81,7 +89,14 @@ export async function deliver($: EngineInterface, items: InboxItem[]) {
     else if (item.kind === 'rc') await $.command.run({ command: 'remote-control' })
     else if (item.kind === 'close') await $.command.run({ command: 'exit' }).catch(async () => post($, { kind: 'close-failed', sessionId: await $.session.id() }))
     else if (item.kind === 'handoff') await maybeHandoff($, true)
-    else await $.session.compact({})
+    else {
+      // Runs only between turns (it rejects mid-turn), so a chat with open tasks would sit idle after it.
+      const { skip } = await $.session.compact({}).catch(() => ({ skip: true }))
+      if (skip) continue
+      await restoreFeed($).catch(() => undefined)
+      feed.nudge = undefined
+      await keepGoing($, lastAnswer)
+    }
   }
 }
 
@@ -98,8 +113,38 @@ export function budgetDenial(role: string, used: Record<string, number>, budgets
 const READS = new Set(['Read', 'Grep', 'Glob'])
 export const pausedDenial = (tool: string, paused: boolean) => (paused && !READS.has(tool) ? 'Switchboard is paused from the Company card: reading only until it is resumed.' : undefined)
 
+// Usage hold: owned here, so a chat pauses near the limit and resumes after the reset with no Switchboard window open.
+type Window = { kind: string; percentUsed: number; resetsAt?: string | number }
+export type Hold = { kind: string; percent: number; resetsAt: number; mid?: boolean }
+type HubPause = { kind?: unknown; percent?: unknown; resumeAt?: unknown }
+const msOf = (r?: string | number) => (typeof r === 'number' ? r : r ? Date.parse(r) : NaN)
+const kindText = (k: string) => k.replace(/_/g, '-')
+
+/** The fullest window at pauseAt or over (99 by default, null off). One past its reset, or one the hub resumed by hand (pauseOff), counts as empty. */
+export function overLimit(windows: Window[], pauseAt: number | null | undefined, now: number, pauseOff = -Infinity): Hold | undefined {
+  if (pauseAt === null) return undefined
+  const w = windows.filter(l => l.percentUsed >= (pauseAt ?? 99) && msOf(l.resetsAt) > Math.max(now, pauseOff)).sort((a, b) => b.percentUsed - a.percentUsed)[0]
+  return w && { kind: w.kind, percent: Math.floor(w.percentUsed), resetsAt: msOf(w.resetsAt) }
+}
+
+/** The hub's pause from limits.json, until its resumeAt: a window that closed never lifts it, so the time does. */
+export const hubHold = (p: HubPause | undefined, now: number): Hold | undefined => {
+  if (!p) return undefined
+  const resetsAt = typeof p.resumeAt === 'number' ? p.resumeAt : Number.MAX_SAFE_INTEGER
+  return resetsAt > now ? { kind: typeof p.kind === 'string' ? p.kind : 'usage', percent: typeof p.percent === 'number' ? p.percent : 99, resetsAt } : undefined
+}
+
+export function untilText(ms: number) {
+  const s = Math.max(0, Math.ceil(ms / 1000))
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60)
+  return h ? `${h}h ${m}m` : m ? `${m}m` : `${s}s`
+}
+
+export const holdLine = (h: Hold, now: number) => `Paused: ${kindText(h.kind)} limit at ${h.percent}%, resumes in ${untilText(h.resetsAt - now)}`
+export const holdDenial = (h: Hold, now: number) => `Paused by usage-meter: ${kindText(h.kind)} usage at ${h.percent}%. Stop here; this chat resumes by itself when the limit resets, in ${untilText(h.resetsAt - now)}.`
+
 const COMPANY_MS = 10_000
-const company: { at: number; paused: boolean; budgets: Record<string, number> } = { at: -Infinity, paused: false, budgets: {} }
+const company: { at: number; paused: boolean; budgets: Record<string, number>; limit?: HubPause; windows: Window[]; pauseAt?: number | null; pauseOff: number } = { at: -Infinity, paused: false, budgets: {}, windows: [], pauseOff: -Infinity }
 
 /** The hub's company.json, read at most every 10 seconds; missing or broken means not paused, no budgets. */
 async function readCompany($: EngineInterface) {
@@ -112,7 +157,79 @@ async function readCompany($: EngineInterface) {
     company.paused = f.paused === true
     company.budgets = f.budgets && typeof f.budgets === 'object' ? f.budgets : {}
   } catch { company.paused = false; company.budgets = {} }
+  try {
+    const l = JSON.parse(String(await $.fs.read(`${home}/.claude/switchboard/limits.json`)))
+    company.limit = l.paused === true && l.pause && typeof l.pause === 'object' ? l.pause : undefined
+    company.windows = Array.isArray(l.windows) ? l.windows : []
+    company.pauseAt = l.pauseAt === null ? null : typeof l.pauseAt === 'number' ? l.pauseAt : undefined
+    company.pauseOff = typeof l.pauseOff === 'number' ? l.pauseOff : -Infinity
+  } catch { company.limit = undefined; company.windows = []; company.pauseAt = undefined; company.pauseOff = -Infinity }
   return company
+}
+
+// This chat's own limits from session.measure; limits.json adds what other chats saw.
+let measured: Window[] = []
+const held: { id?: string; hold?: Hold; resumedAt?: number } = {}
+let holdBusy = false
+// Switchboard's resume prompt (hub-service.ts PAUSE_CONTINUE).
+const HUB_RESUME = 'Usage limit reset. Continue where you stopped'
+const RESUME_DEDUP_MS = 30 * 60_000
+
+async function loadHold($: EngineInterface) {
+  const id = await $.session.id()
+  if (held.id === id) return
+  const k = (await Promise.resolve().then(() => $.store.get('hold')).catch(() => undefined)) as typeof held | undefined
+  const mine = k?.id === id
+  Object.assign(held, { id, hold: mine ? k?.hold : undefined, resumedAt: mine ? k?.resumedAt : undefined })
+}
+const saveHold = ($: EngineInterface) => Promise.resolve().then(() => $.store.set('hold', { ...held })).catch(() => undefined)
+const postHold = async ($: EngineInterface) => post($, { kind: 'hold', sessionId: held.id, hold: held.hold ?? null }).catch(() => undefined)
+
+async function liftHold($: EngineInterface, now: number) {
+  held.hold = undefined
+  held.resumedAt = now
+  // The cached limits.json may still hold the pause just lifted; reread it next tick.
+  company.at = -Infinity
+  await saveHold($)
+  await $.ui.status(undefined)
+  await postHold($)
+}
+
+const resumeText = (step?: string) => `${OWN}usage limit reset. Carry on from where you stopped${step ? `: ${step}` : ''}. Resume any subagents cut off with SendMessage.`
+
+/** Every poll, idle or not: starts the hold, keeps its status line, and after the reset lifts it with one prompt if it cut work off. */
+export async function holdTick($: EngineInterface) {
+  if (holdBusy) return
+  holdBusy = true
+  try {
+    await loadHold($)
+    const now = await $.clock.now()
+    const c = await readCompany($)
+    const due = overLimit([...measured, ...c.windows], c.pauseAt, now, c.pauseOff) ?? hubHold(c.limit, now)
+    const was = held.hold
+    if (due) {
+      held.hold = was && was.resetsAt >= due.resetsAt ? was : { ...due, ...(was?.mid ? { mid: true } : {}) }
+      if (held.hold !== was) { await saveHold($); await postHold($) }
+      await $.ui.status(holdLine(held.hold, now))
+      return
+    }
+    if (!was) return
+    await liftHold($, now)
+    if (!was.mid) return void (await $.ui.toast('Usage limit reset: unpaused'))
+    await $.ui.toast('Resumed: limit reset')
+    const step = [...feed.tasks.values()].find(t => t.status === 'in_progress')?.subject ?? feed.prompt
+    await $.prompt.submit({ text: resumeText(step) })
+  } finally { holdBusy = false }
+}
+
+/** The denial while held; a denied call means the chat was mid-work, so it gets the resume prompt. */
+export async function heldNow($: EngineInterface) {
+  await loadHold($)
+  const now = await $.clock.now()
+  const h = held.hold
+  if (!h || h.resetsAt <= now) return undefined
+  if (!h.mid) { held.hold = { ...h, mid: true }; await saveHold($) }
+  return holdDenial(h, now)
 }
 
 async function startsToday($: EngineInterface) {
@@ -253,7 +370,7 @@ export function handoffNote(o: {
     const lines = [
       `# Handoff: ${o.project}, ${stamp} UTC`,
       '',
-      'Read this note fully before acting. Recreate every open task below with the task tools before any other work, then take the next action. A task counts as done only with the check that proved it.',
+      'Read this note fully before acting. Recreate every open task below with the task tools before any other work, then, if the aar skill is installed, have a subagent run it on the old chat (Old transcript below), then take the next action. A task counts as done only with the check that proved it.',
     ]
     if (o.ask) lines.push('', '## Last request, verbatim', '', ...quote(o.ask))
     lines.push('', '## Goal', '', s.goal ?? (firstAsk || 'see the last request'))
@@ -341,7 +458,7 @@ type Result = { id: string; line: string }
 const feed: {
   targets: Target[]; foundAt: number; lastLive: number; compactAt?: number; handedOff?: string; prompt?: string; ask?: string; requests: string[]; errors: string[]
   file?: string; plan?: string; brief?: string; tasks: Map<string, Task>; shells: Map<string, Shell>; results: Result[]; summary?: Summary
-  restored?: string; pausing?: number; freshNote?: string
+  restored?: string; pausing?: number; freshNote?: string; nudge?: { n: number; tasks: string }
 } = { targets: [], foundAt: -Infinity, lastLive: -Infinity, tasks: new Map(), requests: [], errors: [], shells: new Map(), results: [] }
 
 type Kept = { tasks?: Array<[string, Task]>; ask?: string; requests?: string[]; errors?: string[]; shells?: Shell[]; results?: Result[]; summary?: Summary; pausing?: number; at: number }
@@ -366,6 +483,7 @@ export async function restoreFeed($: EngineInterface) {
   feed.summary = k?.summary
   feed.pausing = k?.pausing
   feed.freshNote = undefined
+  feed.nudge = undefined
   if (fresh) feed.plan = feed.file = feed.prompt = undefined
 }
 
@@ -430,6 +548,26 @@ const pausePrompt = (shells: Shell[]) => [
   'Then end your reply with these lines and nothing after them:',
   'Goal: <the goal in one line>', 'Tests: <last test command and its result, or not run>', 'Decisions:', '- <pick>: <why>', 'Next: <the next action>',
 ].join('\n')
+
+const ASK_RULE = 'When you need Kenneth to answer or act, ask with the AskUserQuestion tool so it pops up in the terminal and Switchboard. Never end a turn with open tasks you can do yourself.'
+// Same rule as Switchboard's progress.ts askedQuestion: the last paragraph, past a trailing fenced block, ends in '?'.
+// Both test suites hold the same table of cases (switchboard extension/test/progress.test.ts).
+export const endsAsking = (text: string) => (text.replace(/\n*```[^\n]*\n(?:(?!```)[\s\S])*```\s*$/, '').trim().split(/\n\s*\n/).pop() ?? '').trim().endsWith('?')
+// Nudges per chat that keeps stopping without touching its tasks; after that it waits for Kenneth.
+const NUDGES = 3
+// The main chat's last answer, so a later compaction does not push past a question; a reload forgets it.
+let lastAnswer = ''
+
+/** A turn that ended with open tasks and nothing running is asked to carry on, unless it asked Kenneth something or wrapped up. */
+async function keepGoing($: EngineInterface, answer: string) {
+  const tasks = JSON.stringify([...feed.tasks])
+  if (feed.nudge?.tasks !== tasks) feed.nudge = undefined
+  const open = [...feed.tasks.values()].filter(t => t.status !== 'completed')
+  const n = feed.nudge?.n ?? 0
+  if (!open.length || n >= NUDGES || endsAsking(answer) || /commit message[^\n]*\n+```/i.test(answer) || feed.shells.size || (await liveAgents($)).length) return
+  feed.nudge = { n: n + 1, tasks }
+  await $.prompt.submit({ text: `${OWN}you ended your turn with open tasks: ${open.slice(0, 10).map(t => t.subject.slice(0, 80)).join('; ')}. Keep working on them. ${ASK_RULE}` })
+}
 
 const wrapUp = (note: string) => `Context is nearly full and a fresh chat takes over. Start no new tasks or subagents. Wait for running tasks to finish, then append to ${note}: open tasks, decisions, dead ends (one line each with why), results of finished tasks and next steps. Then stop.`
 
@@ -501,6 +639,7 @@ export function notePlan(file: unknown) {
 }
 
 const ASK = 'hub_ask'
+const RECALL = 'hub_recall'
 const EDITS = new Set(['Edit', 'Write', 'NotebookEdit'])
 
 async function discover($: EngineInterface) {
@@ -518,14 +657,24 @@ async function discover($: EngineInterface) {
   return feed.targets
 }
 
+// $.http.fetch takes no timeout or signal, so a frozen window would hold the chat: undefined after two seconds.
+// A host with no clock.sleep (a test double) just waits on the fetch.
+const fetchSoon = ($: EngineInterface, url: string, init?: Parameters<EngineInterface['http']['fetch']>[1]) => Promise.race([
+  $.http.fetch(url, init),
+  Promise.resolve().then(() => $.clock.sleep(FETCH_MS)).then(() => undefined, () => new Promise<never>(() => {})),
+]).catch(() => undefined)
+
+// The window token goes in a header, out of the URL.
+const withToken = (t: Target) => ({ headers: { 'X-Switchboard-Token': t.token } })
+
 async function post($: EngineInterface, body: Record<string, unknown>) {
-  for (const t of await discover($)) {
-    const sent = await $.http.fetch(`http://127.0.0.1:${t.port}/hub`, {
+  await Promise.all((await discover($)).map(async t => {
+    const sent = await fetchSoon($, `http://127.0.0.1:${t.port}/hub`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: t.token, ...body }),
-    }).catch(() => undefined)
+    })
     // A closed window or a new token: look again next time.
     if (!sent || sent.status === 403) feed.foundAt = -Infinity
-  }
+  }))
 }
 
 async function postLive($: EngineInterface, usage: Pick<SessionUsage, 'context' | 'rateLimits' | 'cost'>) {
@@ -544,22 +693,28 @@ async function count($: EngineInterface, owner: string) {
   await $.store.set('uses', { ...uses, [owner]: (uses[owner] ?? 0) + 1 })
 }
 
-async function poll($: EngineInterface) {
-  const id = await $.session.id()
-  for (const t of await discover($)) {
-    const got = await $.http.fetch(`http://127.0.0.1:${t.port}/hub/inbox?session=${encodeURIComponent(id)}&token=${t.token}`).catch(() => undefined)
-    if (!got?.ok) continue
-    try { await deliver($, JSON.parse(got.text) as InboxItem[]) } catch { /* not a list */ }
-  }
+// clock.every does not wait on its fn, and a slow window outlasts a period.
+let polling = false
+export async function poll($: EngineInterface) {
+  if (polling) return
+  polling = true
+  try {
+    const id = await $.session.id()
+    const got = await Promise.all((await discover($)).map(t => fetchSoon($, `http://127.0.0.1:${t.port}/hub/inbox?session=${encodeURIComponent(id)}`, withToken(t))))
+    for (const g of got) {
+      if (!g?.ok) continue
+      try { await deliver($, JSON.parse(g.text) as InboxItem[]) } catch { /* not a list */ }
+    }
+  } finally { polling = false }
 }
 
 /** The window holding this chat's folder, asked for its brief or an answer; this project only. */
-async function askHome($: EngineInterface, route: 'brief' | 'ask', q?: string) {
+async function askHome($: EngineInterface, route: 'brief' | 'ask' | 'recall', q?: string) {
   const cwd = norm(await $.session.cwd())
   const home = homeOf(await discover($), cwd)
   if (!home) return undefined
-  const query = `cwd=${encodeURIComponent(cwd)}&session=${encodeURIComponent(await $.session.id())}${q ? `&q=${encodeURIComponent(q)}` : ''}&token=${home.token}`
-  const got = await $.http.fetch(`http://127.0.0.1:${home.port}/hub/${route}?${query}`).catch(() => undefined)
+  const query = `cwd=${encodeURIComponent(cwd)}&session=${encodeURIComponent(await $.session.id())}${q ? `&q=${encodeURIComponent(q)}` : ''}`
+  const got = await fetchSoon($, `http://127.0.0.1:${home.port}/hub/${route}?${query}`, withToken(home))
   return got?.ok ? got.text : undefined
 }
 
@@ -603,7 +758,7 @@ async function readNote($: EngineInterface) {
 async function keepOf($: EngineInterface) {
   const home = homeOf(await discover($), norm(await $.session.cwd()))
   if (!home) return undefined
-  const got = await $.http.fetch(`http://127.0.0.1:${home.port}/hub/keep?token=${home.token}`).catch(() => undefined)
+  const got = await fetchSoon($, `http://127.0.0.1:${home.port}/hub/keep`, withToken(home))
   if (!got?.ok) return undefined
   return { home, keep: JSON.parse(got.text) as { onFull?: string; freshBranch?: boolean } }
 }
@@ -621,6 +776,7 @@ async function settle($: EngineInterface, answer: string) {
   feed.compactAt ??= usage.context.breakdown?.autoCompactThreshold
   const tokens = usage.context.tokens ?? 0
   const near = nearFull(tokens, feed.compactAt)
+  if (!near && feed.pausing === undefined) await keepGoing($, answer)
   // undefined: no window answered, which says nothing about the mode.
   const kept = near ? await keepOf($) : undefined
   if (feed.pausing === undefined) {
@@ -654,20 +810,32 @@ async function settle($: EngineInterface, answer: string) {
 // One handoff at a time: the hub's inbox and settle can both ask before the first has written its note.
 let handingOff: Promise<void> | undefined
 /** Writes the note and has this chat's window open the next one: from settle in fresh chat mode, or whenever the hub asks (force). */
-const maybeHandoff = ($: EngineInterface, force = false) => (handingOff ??= handoff($, force).finally(() => { handingOff = undefined }))
+// After a refused handoff, settles wait this long before writing another note; a forced one goes now.
+const HANDOFF_RETRY_MS = 5 * 60_000
+let handoffFailedAt: number | undefined
+export const maybeHandoff = ($: EngineInterface, force = false) => (handingOff ??= handoff($, force).finally(() => { handingOff = undefined }))
 
 async function handoff($: EngineInterface, force: boolean) {
   const id = await $.session.id()
-  if (feed.handedOff === id) return
-  // A reload forgets feed; the store still knows.
-  if (await handedOff($).catch(() => undefined)) return
   const cwd = norm(await $.session.cwd())
+  // A reload forgets feed; the store still knows.
+  const done = await handedOff($).catch(() => undefined)
+  if (feed.handedOff === id || done) {
+    // Asked again by hand: the window may have lost the first post or still be waiting on subagents.
+    const kept = force && done ? await keepOf($) : undefined
+    if (kept) await fetchSoon($, `http://127.0.0.1:${kept.home.port}/hub`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: kept.home.token, kind: 'handoff', sessionId: id, cwd, note: done, force: true }),
+    })
+    return
+  }
   const kept = await keepOf($)
   if (!kept || (!force && kept.keep.onFull !== 'fresh')) return
   const { home, keep } = kept
+  const now = await $.clock.now()
+  if (!force && handoffFailedAt !== undefined && now - handoffFailedAt < HANDOFF_RETRY_MS) return
   feed.handedOff = id
   const { note, planPath, firstTask } = await readNote($)
-  const now = await $.clock.now()
   const home_ = norm((await $.env.get('HOME')) ?? (await $.env.get('USERPROFILE')) ?? '')
   const iso = new Date(now).toISOString()
   const label = (planWords(planPath).slice(0, 3).join('-') || words(firstTask ?? '').slice(0, 3).join('-') || 'continued').slice(0, 40).replace(/-+$/, '')
@@ -678,11 +846,19 @@ async function handoff($: EngineInterface, force: boolean) {
   // Outside every repo, so a note is never committed. The hub matches a note by its -<id8>.md ending.
   const path = `${home_}/.claude/handoffs/${dir}/${[iso.slice(0, 10), iso.slice(11, 16).replace(':', ''), project, label, id.slice(0, 8)].filter(Boolean).join('-')}.md`
   await $.fs.write(path, note)
-  await rememberHandoff($, id, path, now).catch(() => undefined)
-  await $.http.fetch(`http://127.0.0.1:${home.port}/hub`, {
+  const sent = await fetchSoon($, `http://127.0.0.1:${home.port}/hub`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ token: home.token, kind: 'handoff', sessionId: id, cwd, note: path, plan: planPath, task: firstTask, branch: keep.freshBranch ? branchFor(planPath, firstTask, new Date(now)) : undefined }),
-  }).catch(() => undefined)
+    body: JSON.stringify({ token: home.token, kind: 'handoff', sessionId: id, cwd, note: path, plan: planPath, task: firstTask, branch: keep.freshBranch ? branchFor(planPath, firstTask, new Date(now)) : undefined, ...(force ? { force: true } : {}) }),
+  })
+  // No successor opened: keep working, and the next settle or hub ask tries again.
+  if (!sent?.ok) {
+    feed.handedOff = undefined
+    handoffFailedAt = now
+    await $.ui.toast(`Handoff failed: the Switchboard window did not take it; the note is at ${path}`)
+    return
+  }
+  handoffFailedAt = undefined
+  await rememberHandoff($, id, path, now).catch(() => undefined)
   await $.ui.toast(`Context nearly full: a fresh chat continues from ${path}`)
 }
 
@@ -702,18 +878,25 @@ export const register: Register = on => {
       description: "Ask Switchboard's brain about this project's other live chats: who is on what, which files they are editing, what to pick up next. One short paid Haiku call per question; it knows nothing outside this project.",
       inputSchema: { type: 'object', properties: { question: { type: 'string' } }, required: ['question'] },
     })
-    $.clock.every(POLL_MS, () => poll($))
+    await $.tool.register({
+      name: RECALL,
+      description: 'Search Switchboard memory, the knowledge graph of memory notes and the vault, before researching a topic. Answers the best matching notes and how they relate (supersedes, depends-on, part-of, contradicts, related). Free and local.',
+      inputSchema: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] },
+    })
+    $.clock.every(POLL_MS, () => { void poll($); void holdTick($).catch(() => undefined) })
     return started
   })
 
   on('session.measure', async ($, e, next) => {
-    await postLive($, e)
+    measured = e.rateLimits
+    void postLive($, e).catch(() => undefined)
     return next(e)
   })
 
   // Answers without next, so the generic hook's pause check below never sees it.
   on('tool.call', { tool: `mcp__usage-meter__${ASK}` }, async ($, e) => {
-    const held = pausedDenial(String(e.tool), (await readCompany($).catch(() => company)).paused)
+    const c = await readCompany($).catch(() => company)
+    const held = (await heldNow($).catch(() => undefined)) ?? pausedDenial(String(e.tool), c.paused)
     if (held) return { deny: held }
     const q = (e as { question?: unknown }).question
     if (typeof q !== 'string' || !q.trim()) return { deny: 'Give a question.' }
@@ -721,11 +904,20 @@ export const register: Register = on => {
     return { result: answer ?? 'No Switchboard window holds this folder, so the brain cannot answer.' }
   })
 
+  // No pause check: recall reads local files and spends nothing.
+  on('tool.call', { tool: `mcp__usage-meter__${RECALL}` }, async ($, e) => {
+    const q = (e as { query?: unknown }).query
+    if (typeof q !== 'string' || !q.trim()) return { deny: 'Give a query.' }
+    const answer = await askHome($, 'recall', q.slice(0, 500)).catch(() => undefined)
+    return { result: answer ?? 'No Switchboard window holds this folder, so memory cannot be searched.' }
+  })
+
   on('prompt.submit', async ($, e, next) => {
     shellsDone(e.text)
     // Notifications and this mod's own wrap-up are no requests of Kenneth's.
     if (e.isMeta || e.command || e.origin?.kind === 'task-notification' || e.text.startsWith(OWN) || e.text.startsWith('<task-notification>')) return next(e)
     await restoreFeed($).catch(() => undefined)
+    feed.nudge = undefined
     feed.prompt = redact(e.text).replace(/\s+/g, ' ').slice(0, 200)
     feed.ask = redact(e.text)
     feed.requests.push(feed.ask)
@@ -741,7 +933,8 @@ export const register: Register = on => {
   // Who to delegate to comes from ~/.claude/CLAUDE.md (kit/rules.md), not from here.
   on('prompt.compose', async ($, e, next) => {
     const composed = await next(e)
-    return feed.brief ? { sections: [...composed.sections, { id: 'usage-meter:brief', text: feed.brief, scope: 'session' as const }] } : composed
+    const sections = [...composed.sections, { id: 'usage-meter:asks', text: ASK_RULE, scope: 'session' as const }]
+    return { sections: feed.brief ? [...sections, { id: 'usage-meter:brief', text: feed.brief, scope: 'session' as const }] : sections }
   })
 
   // Each role runs on its own model, within its daily budget; counts go to the hub.
@@ -758,28 +951,30 @@ export const register: Register = on => {
     const model = roleModel(role)
     const started = await next(model ? { ...e, model } : e)
     if (started.deny !== undefined) return started
-    // ponytail: read-modify-write, parallel spawns can undercount; use an atomic increment if the store gains one.
+    // Read-modify-write, so parallel spawns can undercount. Switch to an atomic increment if the store gets one.
     const counted = { ...used, [role]: (used[role] ?? 0) + 1 }
     await $.store.set('starts', { day, used: counted })
-    await post($, { kind: 'agent', sessionId: await $.session.id(), day, used: counted }).catch(() => undefined)
+    void (async () => post($, { kind: 'agent', sessionId: await $.session.id(), day, used: counted }))().catch(() => undefined)
     return started
   }).catch(($, e, next) => next(e))
 
   on('tool.call', async ($, e, next) => {
     const tool = String(e.tool)
-    const held = pausedDenial(tool, (await readCompany($).catch(() => company)).paused)
+    const c = await readCompany($).catch(() => company)
+    const held = (await heldNow($).catch(() => undefined)) ?? pausedDenial(tool, c.paused)
     if (held) return { deny: held }
     if (tool === 'Bash' && (e as { run_in_background?: unknown }).run_in_background === true) {
       const held = await heldBack($)
       if (held) return { deny: held }
     }
     const file = (e as { file_path?: unknown; notebook_path?: unknown }).file_path ?? (e as { notebook_path?: unknown }).notebook_path
-    if (EDITS.has(tool) && typeof file === 'string') feed.file = norm(file)
     notePlan(file)
     if (tool.startsWith('mcp__')) await count($, ownerOf(tool)).catch(() => undefined)
     await restoreFeed($).catch(() => undefined)
     const ran = await next(e)
     if (ran.deny === undefined) {
+      // Only an edit that ran: a denied one would read as this chat editing a file it never wrote.
+      if (EDITS.has(tool) && typeof file === 'string') feed.file = norm(file)
       noteTasks(tool, e as Record<string, unknown>, ran.result)
       noteShell(tool, e as Record<string, unknown>, ran.result, ran.text ?? '')
     }
@@ -808,6 +1003,7 @@ export const register: Register = on => {
       const line = redact(e.answer.split('\n').find(l => l.trim()) ?? '').trim().slice(0, 160)
       if (line) feed.results = [...feed.results.filter(r => r.id !== e.agentId), { id: e.agentId, line }].slice(-RESULTS_KEPT)
     } else if (e.reason === 'answer') {
+      lastAnswer = e.answer
       await checkFresh($).catch(() => undefined)
       await settle($, e.answer).catch(() => undefined)
     }

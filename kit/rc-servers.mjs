@@ -6,14 +6,16 @@ import { spawn, spawnSync } from 'node:child_process'
 import * as fs from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { oldRcPids, RC_NAME, rcArgs, rcExitNote, rcPattern, staleRc, withTrust } from './kit.mjs'
+import { oldRcPids, RC_NAME, rcArgs, rcExitNote, rcPath, procs, rcPattern, rcSpawn, staleRc, withTrust } from './kit.mjs'
 
 const home = homedir()
 const root = join(home, 'Documents', 'GitHub')
 const logs = join(home, '.claude', 'switchboard')
 fs.mkdirSync(logs, { recursive: true })
-// launchd starts with a bare PATH; claude lives in ~/.local/bin (native install) or next to node (Homebrew).
-const env = { ...process.env, PATH: [join(home, '.local', 'bin'), dirname(process.execPath), process.env.PATH].join(':') }
+// launchd and a Startup item start with a bare PATH; claude lives in ~/.local/bin (native), npm's bin or next to node.
+const env = { ...process.env, PATH: rcPath(process.platform, { home, execDir: dirname(process.execPath), PATH: process.env.PATH, appData: process.env.APPDATA }) }
+// Windows env keys ignore case: drop the copied Path so only PATH reaches claude.
+if (process.platform === 'win32') delete env.Path
 delete env.CLAUDE_CODE_CHILD_SESSION
 const SETTLE_MS = 3_000
 
@@ -22,7 +24,7 @@ function start() {
   const logPath = join(logs, `rc-${RC_NAME}.log`)
   // A fresh log each run, holding stderr only: stdout is the live screen, megabytes a day.
   const log = fs.openSync(logPath, 'w')
-  const child = spawn('claude', rcArgs(), { cwd: root, env, detached: true, stdio: ['ignore', 'ignore', log] })
+  const child = spawn('claude', rcArgs(), { cwd: root, env, detached: true, stdio: ['ignore', 'ignore', log], ...rcSpawn(process.platform) })
   return new Promise(resolve => {
     const done = line => { clearTimeout(timer); child.removeAllListeners(); child.unref(); resolve(line) }
     const timer = setTimeout(() => done(`started ${RC_NAME} in ${root} (pid ${child.pid}), errors to ${logPath}`), SETTLE_MS)
@@ -47,12 +49,13 @@ try {
 }
 
 // Per-repo servers an older kit started: stopped, so every machine ends up with just this one.
-const old = oldRcPids(spawnSync('pgrep', ['-lf', 'remote-control --name'], { encoding: 'utf8' }).stdout ?? '')
+const old = oldRcPids(procs('remote-control --name', process.platform, spawnSync))
 for (const pid of old) { try { process.kill(pid) } catch {} }
 if (old.length) console.log(`stopped ${old.length} per-repo server(s)`)
 
-const r = spawnSync('pgrep', ['-lf', rcPattern(RC_NAME)], { encoding: 'utf8' })
-const now = r.status === 0 ? r.stdout.trim().split('\n').map(l => ({ pid: Number(l.split(' ')[0]), args: l })) : []
+// On Windows both cmd.exe and claude carry the command line; both are killed on a restart.
+const out = procs(rcPattern(RC_NAME), process.platform, spawnSync).trim()
+const now = out ? out.split('\n').map(l => ({ pid: Number(l.split(' ')[0]), args: l })) : []
 if (now.length && !now.some(s => staleRc(s.args))) console.log(`running ${RC_NAME}`)
 else {
   // Started before bypass mode: phone chats would still ask for permission.

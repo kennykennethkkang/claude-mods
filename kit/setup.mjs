@@ -4,19 +4,20 @@
 //   node kit/setup.mjs --dry-run   list those steps without running them
 //   node kit/setup.mjs --export    write manifest.json, skills, presets and role subagents from this machine
 //   node kit/setup.mjs --rules-only        only install kit/rules.md as ~/.claude/CLAUDE.md and ~/.codex/AGENTS.md
-//   node kit/setup.mjs --agents-only       only install kit/agents/*.md into ~/.claude/agents
+//   node kit/setup.mjs --agents-only       only install kit/agents/*.md into ~/.claude/agents, and as Codex roles with ecc-agents
 //   node kit/setup.mjs --permissions-only  only set bypass mode and the deny list in ~/.claude/settings.json
-//   node kit/setup.mjs --rc-only           only install the Remote Control LaunchAgent (macOS)
+//   node kit/setup.mjs --rc-only           only install the Remote Control login item (macOS LaunchAgent, Windows Startup)
 // macOS, Linux and Windows, Node 20 or later. Keys and sign-ins never travel in the kit.
 import { spawnSync } from 'node:child_process'
 import { copyFileSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { exportManifest, isSecretFile, launchAgent, mergeSettings, newestVsix, planSetup, RC_LABEL, RULES_HEADER, rulesAction, rulesTargets, withDeny } from './kit.mjs'
+import { CODEX_AGENT_HEADER, codexAgent, exportManifest, isSecretFile, keyLine, launchAgent, mergeSettings, newestVsix, planSetup, RC_LABEL, rcLogin, RULES_HEADER, rulesAction, rulesTargets, startupFile, startupVbs, withDeny } from './kit.mjs'
 
 const KIT = dirname(fileURLToPath(import.meta.url))
 const CLAUDE = join(homedir(), '.claude')
+const CODEX = join(homedir(), '.codex')
 const flags = new Set(process.argv.slice(2))
 const readJson = (p, fallback) => { try { return JSON.parse(readFileSync(p, 'utf8')) } catch { return fallback } }
 // The first backup is the one worth keeping: a later run would only copy the kit's own output over it.
@@ -108,6 +109,8 @@ function setup(dry) {
       }
     }
   }
+  const login = rcLogin(process.platform, homedir(), process.env)
+  if (login) console.log(`> Remote Control at login: ${login}`)
   if (dry) return
   installRules()
   installRc()
@@ -116,11 +119,17 @@ function setup(dry) {
   console.log(`
 Still yours to do, since keys and sign-ins never travel in the kit:
   - Claude and Codex: run claude once to sign in, and codex login
-  - Jev: run /jev-setup in a chat for the OpenRouter key
+  - ${keyLine('Jev (OpenRouter)', 'OPENROUTER_API_KEY', process.env, keychainHas)}
   - Bland: run /bland:setup for its key
+  - ${keyLine('Gemini', 'GEMINI_API_KEY', process.env, keychainHas)}
   - AWS: aws login --profile <name>
   - Restart VS Code, click the Switchboard icon in the left bar, and run /reload-plugins in any chat that was already open`)
 }
+
+// Without -w, security prints only the item's attributes, never the key.
+const keychainHas = name => process.platform === 'darwin'
+  ? spawnSync('security', ['find-generic-password', '-s', 'switchboard', '-a', name], { stdio: 'ignore' }).status === 0
+  : existsSync(join(homedir(), '.claude', 'switchboard', 'keys', name))
 
 /** kit/rules.md to every agent that is installed; a hand-written file is kept as .before-kit first. */
 function installRules() {
@@ -149,6 +158,27 @@ function installAgents(names, dry) {
     if (existsSync(dest) && readFileSync(dest, 'utf8') !== text) backupOnce(dest)
     writeFileSync(dest, text)
   }
+  installCodexAgents(names)
+}
+
+/** The same roles plus ecc-agents (as ecc-<name>) into ~/.codex/agents; a hand-made TOML is kept as .before-kit first. */
+function installCodexAgents(names) {
+  if (!existsSync(CODEX)) { console.log(`> skip Codex roles: ${CODEX} not installed`); return }
+  const ecc = join(KIT, '..', 'ecc-agents', 'agents')
+  const srcs = [...names.map(n => [join(KIT, 'agents', n), '']), ...list(ecc).filter(n => n.endsWith('.md')).map(n => [join(ecc, n), 'ecc-'])]
+  const dir = join(CODEX, 'agents')
+  mkdirSync(dir, { recursive: true })
+  let n = 0
+  for (const [src, prefix] of srcs) {
+    const toml = existsSync(src) && codexAgent(readFileSync(src, 'utf8'), prefix)
+    if (!toml) continue
+    const dest = join(dir, `${/^name = "(.*)"$/m.exec(toml)[1]}.toml`)
+    const old = existsSync(dest) ? readFileSync(dest, 'utf8') : undefined
+    if (old !== undefined && old !== toml && !old.startsWith(CODEX_AGENT_HEADER)) backupOnce(dest)
+    writeFileSync(dest, toml)
+    n++
+  }
+  console.log(`> wrote ${n} Codex roles into ${dir}`)
 }
 
 /** Bypass mode and the deny list, for when only permissions should change. */
@@ -160,8 +190,9 @@ function applyPermissions() {
   console.log(`> permissions set in ${path}`)
 }
 
-/** A LaunchAgent that starts the Remote Control server at login, and once now. */
+/** A login item that starts the Remote Control server at login, and once now. */
 function installRc() {
+  if (process.platform === 'win32') return installRcWindows()
   if (process.platform !== 'darwin') return
   const plist = join(homedir(), 'Library', 'LaunchAgents', `${RC_LABEL}.plist`)
   mkdirSync(dirname(plist), { recursive: true })
@@ -174,6 +205,16 @@ function installRc() {
   // At login the agent opens rc-servers.mjs inside ~/Documents, which macOS holds until node is allowed there.
   console.log(`  Give node access to your Documents folder: System Settings > Privacy & Security > Files and Folders (or Full Disk Access) > node (${node}).
   The server runs in ~/Documents/GitHub; node ${join(KIT, 'rc-servers.mjs')} marks that folder trusted and says if it still refuses.`)
+}
+
+/** Windows: a hidden .vbs in the Startup folder (no admin, unlike schtasks /sc onlogon), then one run now. */
+function installRcWindows() {
+  const file = startupFile(homedir(), process.env)
+  mkdirSync(dirname(file), { recursive: true })
+  // process.execPath is the installed node.exe; it moves only when Node is reinstalled elsewhere.
+  writeFileSync(file, startupVbs(process.execPath, join(KIT, 'rc-servers.mjs')))
+  console.log(`> Remote Control Startup item at ${file}`)
+  if (spawnSync(process.execPath, [join(KIT, 'rc-servers.mjs')], { stdio: 'inherit', windowsHide: true }).status !== 0) console.log(`  could not start it now: run node ${join(KIT, 'rc-servers.mjs')} by hand`)
 }
 
 if (flags.has('--export')) exportKit()

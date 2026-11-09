@@ -7,6 +7,7 @@ As someone running Claude Code with broad permissions, I want routine commands t
 </user-story>
 
 <when-to-use>
+- For one repo with Kenneth's three risk checks (destructive, paid, prod) and paid-guard chained in, use `/jev-setup-project` instead: its gate only ever asks or stays out, never allows
 - "Is this safe to run", "gate tool calls", "auto-approve the boring stuff"
 - Installing a PreToolUse hook
 - Any automation that takes an action on Jev's say-so

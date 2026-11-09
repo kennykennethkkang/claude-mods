@@ -1,0 +1,9 @@
+{
+  "name": "phone-mode",
+  "version": "0.1.0",
+  "description": "With Switchboard's Phone toggle on, turns AskUserQuestion into a phone call through the phone skill, pictures pushed to the phone first",
+  "author": {
+    "name": "Kenneth Kang"
+  },
+  "license": "MIT"
+}

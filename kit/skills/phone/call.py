@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Phone the owner through the Bland CLI, wait for the call to end, print their answer.
 
-usage: call.py "question" ["context"] [--dry-run]
+usage: call.py "question" ["context"] [--dry-run] [--say]
+--say: a notice, not a question; says the text, ends, waits for the hangup
 reads ~/.config/bland/env (PHONE_TO, PHONE_NAME, optional BLAND_API_KEY)
 auth: the bland CLI profile (bland auth login --device) or BLAND_API_KEY
 exit 0 answered, 2 no human, 1 config or API error
@@ -29,8 +30,8 @@ def bland(*args):
     return json.loads(text[text.index("{"):]) if "{" in text else {}
 
 def main():
-    args = [a for a in sys.argv[1:] if a != "--dry-run"]
-    dry = "--dry-run" in sys.argv
+    args = [a for a in sys.argv[1:] if a not in ("--dry-run", "--say")]
+    dry, say = "--dry-run" in sys.argv, "--say" in sys.argv
     if not args:
         print(__doc__); return 1
     question, context = args[0], (args[1] if len(args) > 1 else "")
@@ -53,8 +54,17 @@ def main():
         "and ask if that is right. When they confirm, say you will pass it on and end the call. "
         "If they say call back later or cannot decide, say okay and end the call."
     )
+    first = f"Hi {name}, this is Claude Code. I need a quick decision from you."
+    if say:
+        task = (
+            f"You are calling {name} on behalf of their coding agent, Claude Code, with a short update. "
+            f"Say exactly this: \"{question}\" "
+            + (f"Background they may want: {context} " if context else "")
+            + "Ask nothing. If they ask for more detail, answer only from the background. Then say goodbye and end the call."
+        )
+        first = f"Hi {name}, this is Claude Code with a quick update."
     cmd = ["call", "send", to or "+1XXXXXXXXXX", "--task", task,
-           "--first-sentence", f"Hi {name}, this is Claude Code. I need a quick decision from you.",
+           "--first-sentence", first,
            "--max-duration", "5"]
     if dry:
         print("bland " + " ".join(json.dumps(c) if " " in c else c for c in cmd)); return 0
@@ -75,6 +85,9 @@ def main():
             break
     if not call.get("completed"):
         print("timed out waiting for the call to end"); return 2
+    if say:
+        print("status:", call.get("status"), "answered_by:", call.get("answered_by"))
+        return 0 if call.get("answered_by") == "human" else 2
     # the summary can lag the hangup by up to a minute
     for _ in range(12):
         if call.get("summary"): break

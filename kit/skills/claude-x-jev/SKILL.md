@@ -1,6 +1,6 @@
 ---
 name: claude-x-jev
-description: Fast, cheap, typed decisions for Claude Code through Jev, TypeSafe's decision model on OpenRouter. Jev sorts, checks, scores, gates and verifies at 0.3 seconds and a fraction of a cent per item, with a confidence number on every answer; Claude keeps the reading, writing and judgment. Use when the user says "jev", "/jev", "/jev-setup", "/jev-classify", "/jev-check", "/jev-score", "/jev-route", "/jev-verify", "/jev-gate", "/jev-match", "/jev-tune", "/jev-lint", "/jev-bench", "/jev-watch", "/jev-status", "classify these", "sort my inbox", "triage these comments", "qualify these leads", "score these", "is this safe to run", "gate tool calls", "verify this draft", "are these the same company", "which threshold", "jev vs claude", "decision model", "openrouter decisions", or wants to run a yes/no, pick-one, or rate-on-a-scale question over many items without spending a Claude session on each one.
+description: Fast, cheap, typed decisions for Claude Code through Jev, TypeSafe's decision model on OpenRouter. Jev sorts, checks, scores, gates and verifies at 0.3 seconds and a fraction of a cent per item, with a confidence number on every answer; Claude keeps the reading, writing and judgment. Use when the user says "jev", "/jev", "/jev-setup", "/jev-setup-project", "set up jev for this project", "/jev-classify", "/jev-check", "/jev-score", "/jev-route", "/jev-verify", "/jev-gate", "/jev-match", "/jev-tune", "/jev-lint", "/jev-bench", "/jev-watch", "/jev-status", "classify these", "sort my inbox", "triage these comments", "qualify these leads", "score these", "is this safe to run", "gate tool calls", "verify this draft", "are these the same company", "which threshold", "jev vs claude", "decision model", "openrouter decisions", or wants to run a yes/no, pick-one, or rate-on-a-scale question over many items without spending a Claude session on each one.
 type: standalone
 version: 0.1.1
 category: operations
@@ -62,6 +62,7 @@ Decision-systems engineer. Turns a fuzzy "sort these" into a typed question set 
 | Command | Description | Routes To |
 |---------|-------------|-----------|
 | `/jev-setup` | Get the OpenRouter key in place, verify a live call, pin the model | tasks/setup.md |
+| `/jev-setup-project` | Turn Jev on for one repo: done-check, Bash gate, AI-tell check, role routing | tasks/setup-project.md |
 | `/jev-status` | Credits, uptime, latency, one live ping | tasks/status.md |
 | `/jev-classify` | Pick-one labels over many items (`choice`) | tasks/classify.md |
 | `/jev-check` | Yes/no probability over many items (`noul`) | tasks/check.md |
@@ -82,6 +83,7 @@ Decision-systems engineer. Turns a fuzzy "sort these" into a typed question set 
 
 ## Load on Command
 @tasks/setup.md (when the user runs /jev-setup, or when install.md says status: unconfigured)
+@tasks/setup-project.md (when the user runs /jev-setup-project or Switchboard's Set up Jev button starts a chat)
 @tasks/status.md (when the user runs /jev-status or asks about credits, uptime, or cost)
 @tasks/classify.md (when the user runs /jev-classify or asks to label, sort, or categorize many items)
 @tasks/check.md (when the user runs /jev-check or asks a yes/no over many items)

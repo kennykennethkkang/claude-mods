@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 import type { EngineInterface, SessionContextBreakdown } from 'claude-code'
 
-import { branchFor, budgetDenial, creditsIn, deliver, dietOf, ensureOpenTasks, handoffDenial, handoffNote, homeOf, jevRun, liveShells, nearFull, norm, notePlan, noteShell, noteTasks, ownerOf, pausedDenial, redact, restoreFeed, roleModel, shellsDone, summaryOf, targetsOf } from '../hooks/register.ts'
+import { branchFor, budgetDenial, creditsIn, deliver, poll, dietOf, endsAsking, ensureOpenTasks, handoffDenial, handoffNote, homeOf, jevRun, heldNow, holdDenial, holdLine, holdTick, hubHold, overLimit, untilText, liveShells, maybeHandoff, nearFull, norm, notePlan, noteShell, noteTasks, ownerOf, pausedDenial, redact, restoreFeed, roleModel, shellsDone, summaryOf, targetsOf } from '../hooks/register.ts'
 
 test('reports to every Switchboard window, whatever folder it has open', () => {
   const files = [
@@ -260,6 +260,26 @@ test('a paused chat cannot ask the hub, which is a paid call', async ($, on) => 
   expect(asked.filter(u => u.includes('/hub/ask'))).toEqual([])
 })
 
+test('hub_recall asks the window holding this folder for what memory knows, even while paused, since it is free', async ($, on) => {
+  const asked: { url: string; token?: string }[] = []
+  on('env.get', () => ({ value: '/u' }))
+  on('clock.now', () => ({ value: 9.1e12 }))
+  on('session.cwd', () => ({ value: '/u/Armasu' }))
+  on('session.id', () => ({ value: 'chat-recall' }))
+  on('fs.list', () => ({ value: [{ name: 'w.json', kind: 'file', size: 10, mtimeMs: 0, isLink: false }] }))
+  on('fs.read', (_, e) => ({ value: String(e.path).endsWith('w.json') ? JSON.stringify({ port: 7, workspace: '/u/Armasu', hubToken: 't' }) : String(e.path).endsWith('company.json') ? '{"paused":true}' : '' }))
+  on('http.fetch', (_, e) => { asked.push({ url: e.url, token: (e.init?.headers as Record<string, string> | undefined)?.['X-Switchboard-Token'] }); return { value: { status: 200, ok: true, headers: {}, text: 'hub-recall: how chats query memory' } } })
+  on('tool.call', () => ({ result: {} }))
+  const ran = await $.tool.call({ tool: 'mcp__usage-meter__hub_recall', query: 'hub recall' })
+  expect(JSON.stringify(ran)).toContain('hub-recall: how chats query memory')
+  const hit = asked.find(a => a.url.includes('/hub/recall'))!
+  expect(hit.url).toContain('http://127.0.0.1:7/hub/recall?')
+  expect(hit.url).toContain('q=hub%20recall')
+  expect(hit.url).not.toContain('token')
+  expect(hit.token).toBe('t')
+  expect(JSON.stringify(await $.tool.call({ tool: 'mcp__usage-meter__hub_recall', query: ' ' }))).toContain('Give a query')
+})
+
 test('an agent start posts the day it counts on, so the hub drops yesterday', async ($, on) => {
   const posts: string[] = []
   on('env.get', () => ({ value: '/u' }))
@@ -272,6 +292,8 @@ test('an agent start posts the day it counts on, so the hub drops yesterday', as
   on('http.fetch', (_, e) => { posts.push(String(e.init?.body ?? '')); return { value: { status: 204, ok: true, headers: {}, text: '' } } })
   on('agent.spawn', (_, e) => ({ model: e.model ?? 'opus' }))
   await $.agent.spawn({ subagentType: 'engineer', prompt: 'x', description: 'x' } as never)
+  // Posted off the spawn's path.
+  await new Promise(r => setTimeout(r, 20))
   const agent = posts.find(p => p.includes('"kind":"agent"'))
   expect(agent).toContain(`"day":"${new Date(9.9e12).toISOString().slice(0, 10)}"`)
   expect(agent).toContain('"used":{"engineer":1}')
@@ -433,6 +455,14 @@ test('a handoff note reads in order: the ask, goal, state, decisions, open tasks
   expect(note).toContain('- [ ] Order the note (pending)')
 })
 
+test('a handoff note has the fresh chat run an aar on the old chat after recreating tasks', () => {
+  const note = handoffNote(FULL)
+  const head = note.split('\n')[2]
+  expect(head).toMatch(/Recreate every open task.*if the aar skill is installed, have a subagent run it on the old chat/)
+  expect(head).toContain('Old transcript')
+  expect(handoffNote({ ...FULL, ask: 'x'.repeat(6_000) }).split('\n')[2]).toBe(head)
+})
+
 test('a long note trims dead ends and changed files, never the verbatim tier', () => {
   const ask = 'x'.repeat(6_000)
   const dead = Array.from({ length: 80 }, (_, i) => `- Dead end ${i}: tried and failed for a long reason that goes on`).join('\n')
@@ -588,6 +618,31 @@ test('a reloaded mod does not hand off a session twice', async () => {
   } as unknown as EngineInterface
   await deliver($, [{ id: 'h', kind: 'handoff' }])
   expect(written).toEqual([])
+})
+
+test('a handoff asked for again posts the kept note once more, forced, without a second note', async () => {
+  const written: string[] = []
+  const posts: string[] = []
+  const kept = new Map<string, unknown>([['handoffs', { 'chat-again': { note: '/u/.claude/handoffs/Armasu/old.md', at: 1 } }]])
+  const $ = {
+    env: { get: async () => '/u' },
+    session: { cwd: async () => '/u/Armasu', id: async () => 'chat-again', usage: async () => ({ context: { tokens: 1 } }) },
+    clock: { now: async () => 9.9e12 },
+    store: { get: async (k: string) => kept.get(k), set: async (k: string, v: unknown) => { kept.set(k, v) } },
+    fs: {
+      list: async (dir: string) => (dir.includes('plans') ? [] : [{ name: 'w.json', kind: 'file' }]),
+      read: async (path: string) => (path.endsWith('w.json') ? JSON.stringify({ port: 7, workspace: '/u/Armasu', hubToken: 't' }) : ''),
+      write: async (path: string) => { written.push(path) },
+    },
+    http: { fetch: async (url: string, init?: { body?: string }) => { posts.push(`${url} ${init?.body ?? ''}`); return { status: 200, ok: true, text: '{"onFull":"fresh"}' } } },
+    ui: { toast: async () => undefined },
+  } as unknown as EngineInterface
+  await deliver($, [{ id: 'h', kind: 'handoff' }])
+  expect(written).toEqual([])
+  const sent = posts.filter(p => p.includes('"kind":"handoff"'))
+  expect(sent.length).toBe(1)
+  expect(sent[0]).toContain('"note":"/u/.claude/handoffs/Armasu/old.md"')
+  expect(sent[0]).toContain('"force":true')
 })
 
 test('reads the wrap-up reply into goal, tests, decisions and next action', () => {
@@ -897,4 +952,358 @@ test('a failed keep fetch leaves the pause on: no spawn, no second wrap-up', asy
   keep = { status: 200, text: '{"onFull":"fresh"}' }
   await end()
   expect(o.prompts.length).toBe(1)
+})
+
+test('a turn that ends with open tasks and nothing running is asked to keep going, three times at most without progress', async ($, on) => {
+  const o = { prompts: [] as string[], posts: [] as string[], notes: [] as string[] }
+  let agents: unknown[] = []
+  pauseRig(on as never, 'chat-keep-1', { ...o, tokens: () => 40_000, keep: () => ({ status: 200, text: '{"onFull":"fresh"}' }), agents: () => agents })
+  let result: unknown = { task: { id: 'k1', subject: 'Wire the hook' } }
+  on('tool.call', () => ({ result }))
+  await $.tool.call({ tool: 'TaskCreate', subject: 'Wire the hook', description: 'x' } as never)
+  const end = (answer = 'Step one done.') => $.turn.complete({ answer, durationMs: 1, isAborted: false, turnId: 't', reason: 'answer' } as never)
+  await end()
+  expect(o.prompts.length).toBe(1)
+  expect(o.prompts[0].startsWith('Switchboard: ')).toBe(true)
+  expect(o.prompts[0]).toContain('Wire the hook')
+  expect(o.prompts[0]).toContain('AskUserQuestion')
+  await end()
+  await end()
+  await end()
+  expect(o.prompts.length).toBe(3)
+  // Progress on a task starts the count over.
+  result = {}
+  await $.tool.call({ tool: 'TaskUpdate', taskId: 'k1', status: 'in_progress' } as never)
+  await end()
+  expect(o.prompts.length).toBe(4)
+  // A question, a commit block or a running subagent ends the turn as is.
+  await end('Should I also bump the version?')
+  await end('Done.\n\nCommit message:\n```\nfeat: x\n```')
+  agents = [{ id: 'q1', type: 'qa', description: 'x', status: 'running' }]
+  await end()
+  expect(o.prompts.length).toBe(4)
+  // Kenneth's own prompt starts the count over too.
+  agents = []
+  await end()
+  await end()
+  expect(o.prompts.length).toBe(6)
+  await $.prompt.submit({ text: 'carry on' })
+  await end()
+  expect(o.prompts.length).toBe(8)
+})
+
+test('no open tasks, or a background shell still running, ends the turn as is', async ($, on) => {
+  const o = { prompts: [] as string[], posts: [] as string[], notes: [] as string[] }
+  pauseRig(on as never, 'chat-keep-2', { ...o, tokens: () => 40_000, keep: () => ({ status: 200, text: '{}' }) })
+  on('tool.call', (_, e) => ({ result: e.tool === 'Bash' ? { backgroundTaskId: 'dev2' } : { task: { id: 'k2', subject: 'A' } } }))
+  const end = () => $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 't', reason: 'answer' } as never)
+  await end()
+  expect(o.prompts.length).toBe(0)
+  await $.tool.call({ tool: 'TaskCreate', subject: 'A', description: 'x' } as never)
+  await $.tool.call({ tool: 'Bash', command: 'npm run dev', run_in_background: true } as never)
+  await end()
+  expect(o.prompts.length).toBe(0)
+})
+
+test('every chat is told to ask with AskUserQuestion and not to stop with open tasks', async ($, on) => {
+  on('prompt.compose', () => ({ sections: [] }))
+  const got = await $.prompt.compose({ sections: [], promptModel: 'opus', outputStyle: null, tools: [], traits: [], surfaces: [] } as never)
+  expect(JSON.stringify(got)).toContain('AskUserQuestion')
+})
+
+test('a compaction from Switchboard leaves no idle chat with open tasks: it is told to carry on', async () => {
+  const prompts: string[] = []
+  let skip = false
+  const $ = {
+    prompt: { submit: async ({ text }: { text: string }) => { prompts.push(text); return {} } },
+    session: { id: async () => 'compact-chat', compact: async () => ({ skip }) },
+    store: { get: async () => undefined, set: async () => undefined },
+    agent: { list: async () => [] },
+  } as unknown as EngineInterface
+  await restoreFeed($)
+  noteTasks('TaskCreate', { subject: 'Wire the retry', description: 'x' }, { task: { id: 'c1', subject: 'Wire the retry' } })
+  await deliver($, [{ id: 'c', kind: 'compact' }])
+  expect(prompts.length).toBe(1)
+  expect(prompts[0]).toContain('Wire the retry')
+  skip = true
+  await deliver($, [{ id: 'c', kind: 'compact' }])
+  expect(prompts.length).toBe(1)
+})
+
+// Same table as switchboard extension/test/progress.test.ts (askedQuestion); keep the two in step.
+const ENDS_ASKING: [string, boolean][] = [
+  ['Which one?\n\n```\nnpm test\n```\n', true],
+  ['Change:\n\n```diff\n-a\n+b\n```\n\nApply it to main too?\n\n```bash\ngit apply x\n```', true],
+  ['Should I bump the version? I left it at 1.2 for now.', false],
+  ['Is this ok?\n\nDone.', false],
+  ['Fixed the build. Tests pass. Should I also bump the version?', true],
+  ['Here you go.', false],
+  ['', false],
+]
+
+test('endsAsking: the shared ends-on-a-question table', () => {
+  for (const [text, asks] of ENDS_ASKING) expect(endsAsking(text)).toBe(asks)
+})
+
+test('a frozen window holds no chat: session start ends and the other window still gets the post', async ($, on) => {
+  const posts: string[] = []
+  on('env.get', () => ({ value: '/Users/k' }))
+  on('session.cwd', () => ({ value: '/Users/k/Frozen' }))
+  on('session.id', () => ({ value: 'chat-frozen' }))
+  on('session.model', () => ({ value: 'claude-opus-5-5' }))
+  on('session.usage', () => ({ value: { context: { tokens: 1, window: 1_000_000, percent: 0 }, rateLimits: [], startedAt: 0 } }))
+  on('clock.now', () => ({ value: 2_000_000 }))
+  on('clock.every', () => ({ value: undefined }))
+  on('clock.sleep', () => ({ value: undefined }))
+  on('store.get', () => ({ value: undefined }))
+  on('store.set', () => ({ value: undefined }))
+  on('fs.list', () => ({ value: [
+    { name: 'a.json', kind: 'file', size: 10, mtimeMs: 0, isLink: false },
+    { name: 'b.json', kind: 'file', size: 10, mtimeMs: 0, isLink: false },
+  ] }))
+  on('fs.read', (_, e) => ({ value: JSON.stringify({ port: String(e.path).endsWith('a.json') ? 1 : 2, workspace: '/Users/k/Frozen', hubToken: 't' }) }))
+  on('http.fetch', (_, e) => {
+    posts.push(`${e.url} ${e.init?.body ?? ''}`)
+    // Port 1 is a window that never answers.
+    return String(e.url).includes(':1/') ? new Promise(() => {}) : { value: { status: 204, ok: true, headers: {}, text: '' } }
+  })
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  await $.session.start({ cwd: '/Users/k/Frozen', surface: 'terminal', isInteractive: true })
+  expect(posts.some(p => p.startsWith('http://127.0.0.1:2/hub ') && p.includes('"kind":"live"'))).toBe(true)
+})
+
+test('an agent start never waits on the hub post', async ($, on) => {
+  on('env.get', () => ({ value: '/u' }))
+  on('session.id', () => ({ value: 'chat-agent-frozen' }))
+  on('clock.now', () => ({ value: 9.9e12 }))
+  on('clock.sleep', () => new Promise(() => {}))
+  on('store.get', () => ({ value: undefined }))
+  on('store.set', () => ({ value: undefined }))
+  on('fs.list', () => ({ value: [{ name: 'w.json', kind: 'file', size: 10, mtimeMs: 0, isLink: false }] }))
+  on('fs.read', (_, e) => ({ value: String(e.path).endsWith('w.json') ? JSON.stringify({ port: 7, workspace: '/u', hubToken: 't' }) : '' }))
+  on('http.fetch', () => new Promise(() => {}))
+  on('agent.spawn', (_, e) => ({ model: e.model ?? 'opus' }))
+  const started = await $.agent.spawn({ subagentType: 'researcher', prompt: 'x', description: 'x' } as never)
+  expect(started.deny).toBeUndefined()
+})
+
+test('sends the window token in a header, never in the URL', async () => {
+  const asked: Array<{ url: string; token?: string }> = []
+  const $ = {
+    env: { get: async () => '/u' },
+    session: { id: async () => 'chat-header' },
+    clock: { now: async () => 9.98e12, sleep: () => new Promise(() => {}) },
+    fs: { list: async () => [{ name: 'a-1.json', kind: 'file' }], read: async () => JSON.stringify({ port: 1, workspace: '/u', hubToken: 'sekrit' }) },
+    http: { fetch: (url: string, init?: { headers?: Record<string, string> }) => { asked.push({ url, token: init?.headers?.['X-Switchboard-Token'] }); return Promise.resolve({ status: 404, ok: false, headers: {}, text: '' }) } },
+  } as unknown as EngineInterface
+  void poll($)
+  await new Promise(r => setTimeout(r, 20))
+  expect(asked.length).toBe(1)
+  expect(asked[0].url).not.toContain('sekrit')
+  expect(asked[0].token).toBe('sekrit')
+})
+
+test('a slow poll is not run again until it ends, and asks every window at once', async () => {
+  const asked: string[] = []
+  const $ = {
+    env: { get: async () => '/u' },
+    session: { id: async () => 'chat-poll' },
+    clock: { now: async () => 9.99e12, sleep: () => new Promise(() => {}) },
+    fs: {
+      list: async () => [{ name: 'a-1.json', kind: 'file' }, { name: 'b-2.json', kind: 'file' }],
+      read: async (p: string) => JSON.stringify({ port: p.endsWith('a-1.json') ? 1 : 2, workspace: '/u', hubToken: 't' }),
+    },
+    http: { fetch: (url: string) => { asked.push(url); return new Promise(() => {}) } },
+  } as unknown as EngineInterface
+  void poll($)
+  void poll($)
+  await new Promise(r => setTimeout(r, 20))
+  expect(asked.map(u => u.split('/hub')[0]).sort()).toEqual(['http://127.0.0.1:1', 'http://127.0.0.1:2'])
+})
+
+test('a handoff the window refused is not remembered, says so, and can be tried again', async () => {
+  const written: string[] = []
+  const toasts: string[] = []
+  const kept = new Map<string, unknown>()
+  const $ = {
+    env: { get: async () => '/u' },
+    session: { cwd: async () => '/u/Armasu', id: async () => 'chat-refused', usage: async () => ({ context: { tokens: 1 } }) },
+    clock: { now: async () => 9.7e12 },
+    store: { get: async (k: string) => kept.get(k), set: async (k: string, v: unknown) => { kept.set(k, v) } },
+    fs: {
+      list: async (dir: string) => (dir.includes('plans') ? [] : [{ name: 'w.json', kind: 'file' }]),
+      read: async (path: string) => (path.endsWith('w.json') ? JSON.stringify({ port: 7, workspace: '/u/Armasu', hubToken: 't' }) : ''),
+      write: async (path: string) => { written.push(path) },
+    },
+    http: { fetch: async (url: string) => (url.includes('/hub/keep') ? { status: 200, ok: true, text: '{"onFull":"fresh"}' } : { status: 500, ok: false, text: '' }) },
+    ui: { toast: async (t: string) => { toasts.push(t) } },
+  } as unknown as EngineInterface
+  await deliver($, [{ id: 'h', kind: 'handoff' }])
+  expect(kept.get('handoffs')).toBeUndefined()
+  expect(toasts.length).toBe(1)
+  expect(toasts[0]).toContain('failed')
+  await deliver($, [{ id: 'h2', kind: 'handoff' }])
+  expect(written.length).toBe(2)
+})
+
+test('after a refused handoff, settles wait before writing another note; a forced one still goes', async () => {
+  const written: string[] = []
+  let up = false
+  const $ = {
+    env: { get: async () => '/u' },
+    session: { cwd: async () => '/u/Armasu', id: async () => 'chat-backoff', usage: async () => ({ context: { tokens: 1 } }) },
+    clock: { now: async () => 1e13 },
+    store: { get: async () => undefined, set: async () => {} },
+    fs: {
+      list: async (dir: string) => (dir.includes('plans') ? [] : [{ name: 'w.json', kind: 'file' }]),
+      read: async (path: string) => (path.endsWith('w.json') ? JSON.stringify({ port: 7, workspace: '/u/Armasu', hubToken: 't' }) : ''),
+      write: async (path: string) => { written.push(path) },
+    },
+    http: { fetch: async (url: string) => (url.includes('/hub/keep') ? { status: 200, ok: true, text: '{"onFull":"fresh"}' } : up ? { status: 200, ok: true, text: '' } : { status: 500, ok: false, text: '' }) },
+    ui: { toast: async () => {} },
+  } as unknown as EngineInterface
+  await maybeHandoff($, true)
+  await maybeHandoff($)
+  expect(written.length).toBe(1)
+  up = true
+  await maybeHandoff($, true)
+  expect(written.length).toBe(2)
+})
+
+test('an edit counts as the chat file only once it ran, never when denied', async ($, on) => {
+  const posts: string[] = []
+  let now = 5e12
+  on('env.get', () => ({ value: '/u' }))
+  on('session.cwd', () => ({ value: '/u/Armasu' }))
+  on('session.id', () => ({ value: 'chat-edit-file' }))
+  on('clock.now', () => ({ value: now }))
+  on('store.get', () => ({ value: undefined }))
+  on('store.set', () => ({ value: undefined }))
+  on('fs.list', () => ({ value: [{ name: 'w.json', kind: 'file', size: 10, mtimeMs: 0, isLink: false }] }))
+  on('fs.read', (_, e) => ({ value: String(e.path).endsWith('w.json') ? JSON.stringify({ port: 7, workspace: '/u/Armasu', hubToken: 't' }) : '' }))
+  on('http.fetch', (_, e) => { posts.push(String(e.init?.body ?? '')); return { value: { status: 204, ok: true, headers: {}, text: '' } } })
+  on('session.model', () => ({ value: 'claude-opus-5-5' }))
+  on('session.usage', () => ({ value: { context: { tokens: 1, window: 1_000_000, percent: 0 }, rateLimits: [], startedAt: 0 } }))
+  on('clock.every', () => ({ value: undefined }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('tool.call', (_, e) => (String((e as { file_path?: unknown }).file_path).endsWith('held.ts') ? { deny: 'another chat edited it' } : { result: {} }))
+  // A start posts the live row now; the clock moves past the post interval each time.
+  const measure = async () => { now += 10_000; await $.session.start({ cwd: '/u/Armasu', surface: 'terminal', isInteractive: true }) }
+  const lastLive = () => posts.filter(p => p.includes('"kind":"live"')).at(-1) ?? ''
+  await $.tool.call({ tool: 'Edit', file_path: '/u/Armasu/held.ts', old_string: 'a', new_string: 'b' } as never)
+  await measure()
+  expect(lastLive()).not.toContain('held.ts')
+  await $.tool.call({ tool: 'Edit', file_path: '/u/Armasu/ok.ts', old_string: 'a', new_string: 'b' } as never)
+  await measure()
+  expect(lastLive()).toContain('"file":"/u/Armasu/ok.ts"')
+})
+
+test('holds at pauseAt or over, 99 by default, never when off, and not past a reset', () => {
+  const at = Date.parse('2026-11-08T12:00:00Z')
+  const w = [{ kind: 'five_hour', percentUsed: 99.4, resetsAt: '2026-11-08T12:00:00Z' }, { kind: 'seven_day', percentUsed: 40, resetsAt: '2026-11-10T00:00:00Z' }]
+  expect(overLimit(w, undefined, at - 1)).toEqual({ kind: 'five_hour', percent: 99, resetsAt: at })
+  expect(overLimit(w, 100, at - 1)).toBeUndefined()
+  expect(overLimit(w, 40, at - 1)?.kind).toBe('five_hour')
+  expect(overLimit(w, null, at - 1)).toBeUndefined()
+  expect(overLimit(w, undefined, at)).toBeUndefined()
+  // Resumed by hand in Switchboard: that window no longer holds.
+  expect(overLimit(w, undefined, at - 1, at + 60_000)).toBeUndefined()
+  expect(hubHold({ kind: 'five_hour', percent: 99, resumeAt: at }, at - 1)).toEqual({ kind: 'five_hour', percent: 99, resetsAt: at })
+  expect(hubHold({ kind: 'five_hour', percent: 99, resumeAt: at }, at)).toBeUndefined()
+  expect(hubHold(undefined, at)).toBeUndefined()
+})
+
+test('counts down to the reset', () => {
+  expect(untilText(4 * 3_600_000 + 12 * 60_000 + 5_000)).toBe('4h 12m')
+  expect(untilText(12 * 60_000 + 1)).toBe('12m')
+  expect(untilText(45_000)).toBe('45s')
+  expect(untilText(-5)).toBe('0s')
+  const h = { kind: 'five_hour', percent: 99, resetsAt: 3_600_000 }
+  expect(holdLine(h, 0)).toBe('Paused: five-hour limit at 99%, resumes in 1h 0m')
+  expect(holdDenial(h, 0)).toBe('Paused by usage-meter: five-hour usage at 99%. Stop here; this chat resumes by itself when the limit resets, in 1h 0m.')
+})
+
+// Each test starts later than the last, past the 10 s limits.json cache.
+let hb = 3e13
+const holdDouble = (o: { windows: unknown[]; pause?: unknown; id: string }) => {
+  const s = { now: hb, status: [] as Array<string | undefined>, toasts: [] as string[], prompts: [] as string[], posts: [] as string[], store: {} as Record<string, unknown>, limits: { windows: o.windows, ...(o.pause ? { paused: true, pause: o.pause } : {}) } as Record<string, unknown> }
+  const $ = {
+    clock: { now: async () => s.now },
+    session: { id: async () => o.id },
+    env: { get: async () => '/u' },
+    store: { get: async (k: string) => s.store[k], set: async (k: string, v: unknown) => { s.store[k] = JSON.parse(JSON.stringify(v)) } },
+    fs: {
+      list: async () => [{ name: 'a-1.json', kind: 'file' }],
+      read: async (p: string) => (p.endsWith('limits.json') ? JSON.stringify(s.limits) : p.endsWith('company.json') ? '{}' : JSON.stringify({ port: 1, workspace: '/u', hubToken: 't' })),
+    },
+    http: { fetch: async (_: string, init?: { body?: string }) => { if (init?.body) s.posts.push(init.body); return { status: 204, ok: true, text: '' } } },
+    ui: { status: async (t?: string) => { s.status.push(t) }, toast: async (t: string) => { s.toasts.push(t) } },
+    prompt: { submit: async ({ text }: { text: string }) => { s.prompts.push(text); return {} } },
+  } as unknown as EngineInterface
+  return { $, s }
+}
+
+test('a chat cut off mid-work holds until the reset, then gets one prompt from the timer while idle', async () => {
+  const reset = (hb += 1e9) + 3_600_000
+  const { $, s } = holdDouble({ id: 'hold-1', windows: [{ kind: 'five_hour', percentUsed: 99, resetsAt: new Date(reset).toISOString() }] })
+  await holdTick($)
+  expect(s.status.at(-1)).toBe('Paused: five-hour limit at 99%, resumes in 1h 0m')
+  expect(s.posts.some(p => p.includes('"kind":"hold"') && p.includes('"sessionId":"hold-1"') && p.includes('"percent":99'))).toBe(true)
+  expect(await heldNow($)).toBe('Paused by usage-meter: five-hour usage at 99%. Stop here; this chat resumes by itself when the limit resets, in 1h 0m.')
+  s.now = reset - 30_000
+  await holdTick($)
+  expect(s.status.at(-1)).toBe('Paused: five-hour limit at 99%, resumes in 30s')
+  expect(s.prompts).toEqual([])
+  // limits.json still says 99% for the old window: past its reset that counts as empty.
+  s.now = reset + 1_000
+  await holdTick($)
+  await holdTick($)
+  s.now += 20_000
+  await holdTick($)
+  expect(s.prompts.length).toBe(1)
+  expect(s.prompts[0]).toMatch(/^Switchboard: usage limit reset\. Carry on from where you stopped/)
+  expect(s.status.at(-1)).toBeUndefined()
+  expect(s.toasts).toEqual(['Resumed: limit reset'])
+  expect(s.posts.at(-1)).toContain('"hold":null')
+  expect(await heldNow($)).toBeUndefined()
+  // Switchboard's own resume prompt for the same pause comes after: dropped, so the turn runs once.
+  await deliver($, [{ id: 'r1', kind: 'prompt', text: 'Usage limit reset. Continue where you stopped; resume any subagents cut off with SendMessage.' }])
+  expect(s.prompts.length).toBe(1)
+})
+
+test('an idle chat is unpaused at the reset but sent no prompt', async () => {
+  const reset = (hb += 1e9) + 600_000
+  const { $, s } = holdDouble({ id: 'hold-2', windows: [], pause: { kind: 'five_hour', percent: 99, resumeAt: reset, chats: [] } })
+  await holdTick($)
+  expect(s.status.at(-1)).toBe('Paused: five-hour limit at 99%, resumes in 10m')
+  s.now = reset + 11_000
+  await holdTick($)
+  expect(s.prompts).toEqual([])
+  expect(s.status.at(-1)).toBeUndefined()
+})
+
+test('Switchboard resuming first lifts the hold and the mod sends nothing more', async () => {
+  const reset = (hb += 1e9) + 600_000
+  const { $, s } = holdDouble({ id: 'hold-3', windows: [], pause: { kind: 'five_hour', percent: 99, resumeAt: reset, chats: [] } })
+  await holdTick($)
+  await heldNow($)
+  await deliver($, [{ id: 'r2', kind: 'prompt', text: 'Usage limit reset. Continue where you stopped; resume any subagents cut off with SendMessage.' }])
+  expect(s.prompts.length).toBe(1)
+  s.limits = { windows: [] }
+  s.now = reset + 11_000
+  await holdTick($)
+  expect(s.prompts.length).toBe(1)
+})
+
+test('a hand resume inside the limits.json cache is not undone by the next tick', async () => {
+  const reset = (hb += 1e9) + 600_000
+  const { $, s } = holdDouble({ id: 'hold-3b', windows: [], pause: { kind: 'five_hour', percent: 99, resumeAt: reset, chats: [] } })
+  await holdTick($)
+  s.limits = { windows: [], pauseOff: reset }
+  s.now += 2_000
+  await deliver($, [{ id: 'r3', kind: 'prompt', text: 'Usage limit reset. Continue where you stopped; resume any subagents cut off with SendMessage.' }])
+  await holdTick($)
+  const holds = s.posts.map(p => JSON.parse(p)).filter(p => p.kind === 'hold').map(p => (p.hold ? 'hold' : 'lift'))
+  expect(holds).toEqual(['hold', 'lift'])
+  expect(await heldNow($)).toBeUndefined()
 })

@@ -78,7 +78,7 @@ if (prefersReducedMotion) {
 
 **Secondary Action** → Significantly reduced or eliminated. Single, clear feedback per interaction. No cascading or staggered animations.
 
-**Timing** → Two approaches: instant (0ms) for snappy feedback, or extended (500ms+) for gentle perception. Avoid 150-400ms range—fast enough to notice, slow enough to trigger symptoms.
+**Timing** → Two approaches: instant (0ms) for snappy feedback, or extended (500ms+) for gentle perception. Avoid 150-400ms range, fast enough to notice, slow enough to trigger symptoms.
 
 **Exaggeration** → Removed entirely. Literal, proportional visual feedback only. No overshoots, bounces, or dramatic effects.
 

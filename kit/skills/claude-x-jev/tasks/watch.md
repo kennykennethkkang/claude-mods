@@ -33,7 +33,6 @@ Write a runner (bash or Python, the user's choice) to a path outside the skill, 
     #!/usr/bin/env bash
     set -euo pipefail
     cd "$(dirname "$0")"
-    source ~/.zshrc 2>/dev/null || true          # or wherever OPENROUTER_API_KEY lives
     <fetch command> > items.json
     python3 ~/.claude/skills/claude-x-jev/scripts/jev.py route --preset <p> --input items.json --out "runs/$(date +%Y%m%d-%H%M)"
     # next step: act on runs/*.sure.jsonl, queue runs/*.unsure.items.jsonl for Claude or a person
@@ -44,10 +43,10 @@ Explain each line. The runner keeps a dated output per run so nothing is overwri
 <step name="schedule">
 Offer the three common schedulers and write the one they pick:
 - cron: `0 * * * * /bin/bash ~/jev-jobs/<name>/run.sh >> ~/jev-jobs/<name>/cron.log 2>&1`
-- launchd (macOS): a plist under `~/Library/LaunchAgents/` with `StartInterval` 3600 and `EnvironmentVariables` carrying the key
+- launchd (macOS): a plist under `~/Library/LaunchAgents/` with `StartInterval` 3600 and no key in it
 - n8n: a Schedule Trigger into an Execute Command node running the same runner, then a Read Binary File node on the sure and unsure outputs
 
-Environment is the usual failure: cron does not read `.zshrc`. Put the key in the runner's environment explicitly or source the file.
+jev.py reads the key Switchboard saved (its Keychain entry, else ~/.claude/switchboard/keys/OPENROUTER_API_KEY) when the env has none, so the runner and the scheduler need no key. Never write the key into a runner, plist or crontab; if it is not saved in Switchboard, save it there (Settings, Accounts, API keys) first.
 </step>
 
 <step name="first_run_and_handoff" priority="last">
@@ -64,7 +63,7 @@ Run the runner by hand once and read the summary line from its log. Confirm the 
 
 <acceptance-criteria>
 - [ ] The preset passed `checklists/before-autoroute.md` before anything was scheduled
-- [ ] The key is available to the scheduler's environment, not assumed from a shell profile
+- [ ] The key comes from what Switchboard saved, not from a file the runner or scheduler holds
 - [ ] Each run writes to a dated folder
 - [ ] The manual first run was verified from its log and files, not assumed
 </acceptance-criteria>

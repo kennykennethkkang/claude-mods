@@ -1,0 +1,9 @@
+{
+  "name": "bash-approve",
+  "version": "0.1.1",
+  "description": "Runs Bash without a permission prompt in every mode, keeps settings deny rules, and always refuses a short list of destructive or secret reading commands",
+  "author": {
+    "name": "Kenneth Kang"
+  },
+  "license": "MIT"
+}

@@ -5,15 +5,27 @@ import type { EngineInterface, Register } from 'claude-code'
 // Built from its code point so this file holds no em dash itself.
 export const EM = String.fromCharCode(0x2014)
 
-const RULES: { test: RegExp; why: string; short: string }[] = [
+const HUB = 'Kenneth presses the git buttons and Stop process in Switchboard himself. Leave the work modified, and say what looks stuck.'
+
+// flat: matched with \uXXXX and \xNN decoded, then quotes and backslashes stripped, so escaped JSON and quote-split paths read plainly.
+const RULES: { test: RegExp; why: string; short: string; flat?: true }[] = [
   { test: /\bgit\b(\s+-[cC]\s+\S+)*\s+(commit|push)\b/, short: 'a git commit or push', why: 'Kenneth commits and pushes himself, from his own terminal or VS Code Source Control. Leave the work modified.' },
   { test: /\bgit\b(\s+-[cC]\s+\S+)*\s+rm\b[^|;&]*--cached/, short: 'git rm --cached', why: 'git rm --cached stages a deletion. Delete with plain rm; if the index was touched, git reset -q -- <paths>.' },
+  // The hub's git buttons and Stop process are Kenneth's. A speed bump, not a boundary: a script file gets past it,
+  // and a chat with a shell can run git itself. The second rule refuses hub posts whose body or URL is built at run time;
+// a URL held in a variable only counts when the command also posts, so reading /hub/state stays open.
+  { flat: true, test: /^(?=[\s\S]*\/hub\/command\b)(?=[\s\S]*(\bhub-git\b|\bop\s*:\s*(ship|commit-push|commit|push|sync|undo|discard|stash|pop|switch|create|delete-branch|pr|rerun)\b|\bhub-stuck-stop\b|(^|\s)(-d|--data(-binary|-raw|-urlencode)?|--json|-F|--form)(\s+|=)?@))/, short: 'a hub button', why: HUB },
+  { flat: true, test: /^(?=[\s\S]*\b(curl|wget|fetch|https?|node|python3?)\b)(?=[\s\S]*\/hub\/)(?=[\s\S]*((^|\s)(-d|--data(-binary|-raw|-urlencode|-ascii)?|--json|-F|--form|--post-data)(\s+|=)?[$`@]|--post-file)|(?=[\s\S]*(^|[\s;&|(])[A-Za-z_]\w*=[^\s;&|]*\/hub\/)(?=[\s\S]*((^|\s)(-X\s*POST|--request(\s+|=)POST|-d|--data\S*|--json|-F|--form|--post-data)(\s|=|$)|method\s*:\s*POST)))/, short: 'a hub button', why: HUB },
   { test: /\bprettier\b[^|;&]*\s(--write|-w)\b/, short: 'prettier --write', why: 'No formatter here: prettier --write rewraps whole files at 80 columns. Edit by hand.' },
 ]
 
 const DASH = 'An em dash in the new text. Use a comma, a colon, or "to".'
 
-export const bashRule = (command: string) => RULES.find(r => r.test.test(command))
+export const bashRule = (command: string) => {
+  const hex = (_: string, h: string) => String.fromCharCode(parseInt(h, 16))
+  const flat = command.replace(/\\u([0-9a-fA-F]{4})/g, hex).replace(/\\x([0-9a-fA-F]{2})/g, hex).replace(/["'\\]/g, '')
+  return RULES.find(r => r.test.test(r.flat ? flat : command))
+}
 
 const count = (s: string) => s.split(EM).length - 1
 export const addsEmDash = (before: string, after: string) => count(after) > count(before)

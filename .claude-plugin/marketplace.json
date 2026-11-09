@@ -15,6 +15,30 @@
     {
       "name": "paid-guard",
       "source": "./paid-guard"
+    },
+    {
+      "name": "done-check",
+      "source": "./done-check"
+    },
+    {
+      "name": "cache-keeper",
+      "source": "./cache-keeper"
+    },
+    {
+      "name": "ecc-agents",
+      "source": "./ecc-agents"
+    },
+    {
+      "name": "bash-approve",
+      "source": "./bash-approve"
+    },
+    {
+      "name": "chat-wait",
+      "source": "./chat-wait"
+    },
+    {
+      "name": "phone-mode",
+      "source": "./phone-mode"
     }
   ]
 }

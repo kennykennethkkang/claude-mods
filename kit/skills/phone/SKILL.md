@@ -22,4 +22,5 @@ Output ends with `ANSWER: ...` (the decision in the owner's words) and the trans
 - Before calling, say in chat what you are about to ask. After, quote the ANSWER line and continue with it; do not re-ask in chat.
 - Exit 2: do not redial. Leave the question in chat and either pick the safer default or stop.
 - Run `--dry-run` to see the call payload without placing a call.
+- `--say` places a notice with no question (Switchboard phone mode uses it for done, needs-you and usage pauses).
 - Auth is the Bland CLI profile (`bland auth login --device`); `~/.config/bland/env` holds the number and name. Never print, read aloud or commit a key.

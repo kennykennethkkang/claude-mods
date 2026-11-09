@@ -1,0 +1,251 @@
+{
+  "date": "2026-11-08T08:02:36.963Z",
+  "models": {
+    "arms": "sonnet",
+    "judge": "haiku"
+  },
+  "summary": {
+    "baseline": {
+      "n": 5,
+      "correct": 1,
+      "gold": 1,
+      "citation": 0.923,
+      "cost": 0.569
+    },
+    "new": {
+      "n": 5,
+      "correct": 1,
+      "gold": 1,
+      "citation": 0.769,
+      "cost": 0.536
+    }
+  },
+  "rows": [
+    {
+      "id": "q04",
+      "arm": "baseline",
+      "limited": false,
+      "correct": 1,
+      "cited": 2,
+      "supported": 2,
+      "gold": 1,
+      "cost": 0.08598479499999999,
+      "runCost": 0.06984316499999998,
+      "judgeCost": 0.01614163,
+      "tools": [
+        "Agent",
+        "Agent",
+        "WebFetch",
+        "WebFetch"
+      ],
+      "judgeTools": 4,
+      "answer": "**Answer: sodium (Na), atomic number 11.** Apollo 11 was the first mission to land humans on the Moon, and element 11 is sodium.\n\n**Apollo 11 landed the first humans on the Moon**\n- Source: https://www.nasa.gov/mission/apollo-11/ (NASA, page last updated \"Mar 18, 2026\").\n- Quote: \"The primary objective of Apollo 11 was to complete a national goal set by President John F. Kennedy on May 25, 1961: perform a crewed lunar landing and return to Earth.\"\n- The page also has the line \"First human to set foot on the Moon.\" in the Neil Armstrong section. It gives the moonwalk date as July 20, 1969.\n- The page never uses the exact phrase \"first mission to land humans on the Moon\". I'm inferring \"first\" from the Armstrong line and from the fact that this was the Kennedy-goal landing. A page-level quote for \"first landing\" came from a linked September 1969 article summary: \"...the successful first human Moon landing two months earlier...\"\n\n**Sodium has atomic number 11**\n- Source: https://en.wikipedia.org/wiki/Sodium\n- Quote: \"Chemical element with atomic number 11 (Na)\"\n\n**Caveats**\n- I relied on subagents to fetch the pages. I didn't read the pages myself, so the quotes are as they reported them.\n- The sodium fact rests on one source, Wikipedia, which I didn't cross-check against a primary reference such as PubChem or IUPAC.\n- The Wikipedia fetch was truncated, with about 48,000 of 188,000 characters unread. The lead and infobox, where the quote sits, were read.\n- Neither source is a de"
+    },
+    {
+      "id": "q04",
+      "arm": "new",
+      "limited": false,
+      "correct": 1,
+      "cited": 2,
+      "supported": 2,
+      "gold": 1,
+      "cost": 0.09770427,
+      "runCost": 0.0885589,
+      "judgeCost": 0.00914537,
+      "tools": [
+        "Read",
+        "Glob",
+        "ToolSearch",
+        "WebSearch",
+        "WebSearch"
+      ],
+      "judgeTools": 4,
+      "answer": "**Sodium (Na)** is the element. Apollo 11 was the first mission to land humans on the Moon, and sodium has atomic number 11.\n\n**Caveats**\n- **Skill file:** I couldn't find `.claude/skills/deep-research/SKILL.md`, so I ran two standard searches by hand and followed no skill procedure. Nothing was written to the vault.\n- **Quotes:** The search tool returned summaries, not page text, and I didn't open any of the pages. I can't give verbatim quotes without inventing them. Below, the quoted lines are the search summaries. Treat them as paraphrases of what the pages say, not exact text.\n\n**Claims and sources**\n1. Apollo 11 made the first crewed lunar landing.\n   - Source: https://airandspace.si.edu/amp-stories/the-mission (also https://www.planetary.org/space-missions/apollo-11)\n   - Search summary: \"On July 20, 1969, Armstrong and Aldrin became the first humans to land on the moon, while Collins stayed in orbit around the Moon.\"\n2. Sodium has atomic number 11.\n   - Source: https://webelements.com/sodium/ (also https://wikiwand.com/simple/Sodium)\n   - Search summary: \"Sodium has atomic number 11, which means its nucleus holds 11 protons. Its chemical symbol is Na.\"\n\nI can open those pages and pull exact quotes if you want them."
+    },
+    {
+      "id": "q05",
+      "arm": "baseline",
+      "limited": false,
+      "correct": 1,
+      "cited": 3,
+      "supported": 3,
+      "gold": 1,
+      "cost": 0.12976419,
+      "runCost": 0.08169913499999999,
+      "judgeCost": 0.048065055,
+      "tools": [
+        "Agent",
+        "Agent",
+        "WebFetch",
+        "WebFetch",
+        "WebFetch"
+      ],
+      "judgeTools": 7,
+      "answer": "**The Manzanares River** flows through Madrid, the capital of Spain, which hosted the 1992 Summer Olympics in Barcelona.\n\n- **Host country:** Spain.\n  - Source: https://en.wikipedia.org/wiki/1992_Summer_Olympics\n  - Quote: \"...were an international multi-sport event held from 25 July to 9 August 1992 in Barcelona, Catalonia, Spain.\"\n- **Capital:** Madrid.\n  - Source: https://en.wikipedia.org/wiki/Madrid\n  - Quote: \"Madrid is the capital and largest city of Spain.\"\n- **River:** the Manzanares.\n  - Source: https://en.wikipedia.org/wiki/Madrid\n  - Quote: \"Madrid lies on the River Manzanares in the central part of the Iberian Peninsula...\"\n\n**Caveats:**\n- I did not read the pages myself. A fetch subagent read each page and relayed the quotes, so they are second-hand.\n- All three claims rest on Wikipedia pages, which I did not date. I did not cross-check them against a second source such as an official Olympic or Madrid city page.\n- The sources do not disagree. The Madrid subagent said its first fetch's summary of the lead was partly wrong, so it used the verbatim text from a second fetch."
+    },
+    {
+      "id": "q05",
+      "arm": "new",
+      "limited": false,
+      "correct": 1,
+      "cited": 3,
+      "supported": 2,
+      "gold": 1,
+      "cost": 0.10339396000000001,
+      "runCost": 0.09438700000000001,
+      "judgeCost": 0.009006960000000001,
+      "tools": [
+        "Read",
+        "ToolSearch",
+        "WebSearch",
+        "WebSearch"
+      ],
+      "judgeTools": 6,
+      "answer": "**Answer: the Manzanares.** Spain hosted the 1992 Summer Olympics in Barcelona, and the Manzanares flows through Madrid, Spain's capital.\n\nI couldn't follow the skill you named because `.claude/skills/deep-research/SKILL.md` doesn't exist in this directory. I ran a quick two-search lookup instead and wrote nothing to the vault.\n\nThe searches returned snippets, not full pages, so the quotes below come from those snippets. I didn't open the pages themselves.\n\n1. **Spain hosted the 1992 Summer Olympics, in Barcelona.**\n   - URL: https://cavac.at/cavacopedia/1992%20Summer%20Olympics\n   - Quote: \"Barcelona '92\" (the Games ran 25 July–9 August 1992 in Barcelona, Catalonia, Spain).\n   - This is a Wikipedia-style mirror, not the original Wikipedia page. The search also returned https://en.wikipedia.org/wiki/1992_Summer_Olympics-type pages, such as https://wikipedia.com/wiki/Barcelona_92, which I didn't open.\n\n2. **Madrid is Spain's capital.**\n   - I didn't retrieve a page for this. It's common knowledge, not something I sourced.\n\n3. **The Manzanares runs through Madrid.**\n   - URL: https://en.wikipedia.org/wiki/Manzanares_(river)\n   - Quote, as the search summary gave it: it rises in the Sierra de Guadarrama, passes through Madrid, and empties into the Jarama, a tributary of the Tagus.\n   - I couldn't tie the sentence about the river leaving the city \"at its southernmost tip\" to a specific URL.\n   - The source on its upper course is https://manzanareselreal.org/en/what-to-see/the-man"
+    },
+    {
+      "id": "q10",
+      "arm": "baseline",
+      "limited": false,
+      "correct": 1,
+      "cited": 2,
+      "supported": 1,
+      "gold": 1,
+      "cost": 0.08796357,
+      "runCost": 0.07448515,
+      "judgeCost": 0.013478420000000001,
+      "tools": [
+        "ToolSearch",
+        "WebFetch",
+        "WebFetch",
+        "Agent",
+        "Agent",
+        "WebFetch",
+        "WebFetch"
+      ],
+      "judgeTools": 4,
+      "answer": "**Answer: 1969.** The series is *Monty Python's Flying Circus*. Python is named after the group that made it, and the show first aired on 5 October 1969.\n\n1. **Python is named after Monty Python.**\n   - Source: https://docs.python.org/3/faq/general.html, the \"Why is it called Python?\" FAQ entry (page version 3.15.2).\n   - It says Guido van Rossum was reading the published scripts from \"Monty Python's Flying Circus\", \"a BBC comedy series from the 1970s\".\n   - It adds that \"Van Rossum thought he needed a name that was short, unique, and slightly mysterious\".\n   - A subagent fetched this page and relayed these quotes. I did not read the page myself.\n\n2. **The series first aired in 1969.**\n   - Source: https://en.wikipedia.org/wiki/Monty_Python%27s_Flying_Circus\n   - The lead says the first episode \"premiered on 5 October on BBC1\", with \"45 episodes airing over four series from 1969 to 1974\".\n   - The infobox gives the BBC1 run as \"5 October 1969 (1969-10-05) – 18 January 1973 (1973-01-18)\".\n   - A subagent fetched this page and relayed these quotes. I did not read the page myself.\n\n**Caveats**\n- The FAQ's wording puts the show in the 1970s, but the show's own page dates its premiere to 1969. The first episode aired in 1969, and the series ran into the 1970s.\n- The Wikipedia fetch was truncated. A model-extracted summary gave \"Sunday, 5 October 1969, at 10:55 p.m.\", but the subagent did not read that sentence verbatim, so I'm treating it as unverified.\n- Wikipedia is a secondary "
+    },
+    {
+      "id": "q10",
+      "arm": "new",
+      "limited": false,
+      "correct": 1,
+      "cited": 2,
+      "supported": 1,
+      "gold": 1,
+      "cost": 0.12715200499999998,
+      "runCost": 0.11372132999999998,
+      "judgeCost": 0.013430675,
+      "tools": [
+        "Read",
+        "ToolSearch",
+        "WebSearch",
+        "WebSearch",
+        "Agent",
+        "Agent",
+        "WebFetch",
+        "WebFetch",
+        "WebFetch"
+      ],
+      "judgeTools": 4,
+      "answer": "**Answer: 1969.** Python is named after Monty Python, and *Monty Python's Flying Circus* first aired on 5 October 1969.\n\nNote: `.claude/skills/deep-research/SKILL.md` doesn't exist in this directory, so I couldn't follow it. I did a quick search-and-fetch lookup instead, and I wrote nothing to the vault.\n\n1. **Python is named after the Monty Python comedy group's TV series.**\n   - Source: https://docs.python.org/3/faq/general.html\n   - Quote: \"When he began implementing Python, Guido van Rossum was also reading the published scripts from \"Monty Python's Flying Circus\", a BBC comedy series from the 1970s.\"\n   - The same page says the show is from \"the 1970s\". The series actually began in 1969, per the next source.\n\n2. **The series premiered in 1969.**\n   - Source: https://en.wikipedia.org/wiki/Monty_Python%27s_Flying_Circus\n   - Quote: \"The first episode was recorded at the BBC on 7 September 1969 and premiered on 5 October on BBC1\"\n   - The infobox on that page gives the first broadcast as \"5 October 1969\".\n\nI couldn't read Britannica because it returned HTTP 403. The Python FAQ and Wikipedia quotes come from pages a subagent fetched. I haven't read those pages myself.\n\nSources:\n- [Python FAQ: Why is it called Python?](https://docs.python.org/3/faq/general.html)\n- [Wikipedia: Monty Python's Flying Circus](https://en.wikipedia.org/wiki/Monty_Python%27s_Flying_Circus)"
+    },
+    {
+      "id": "q11",
+      "arm": "baseline",
+      "limited": false,
+      "correct": 1,
+      "cited": 3,
+      "supported": 3,
+      "gold": 1,
+      "cost": 0.15327675999999998,
+      "runCost": 0.13242342499999998,
+      "judgeCost": 0.020853335,
+      "tools": [
+        "ToolSearch",
+        "WebFetch",
+        "WebFetch",
+        "Agent",
+        "Agent",
+        "WebFetch",
+        "WebFetch",
+        "WebSearch",
+        "Agent",
+        "WebFetch",
+        "WebFetch",
+        "Agent",
+        "WebFetch"
+      ],
+      "judgeTools": 3,
+      "answer": "**Answer: Irène Joliot-Curie won the Nobel Prize in Chemistry in 1935.** She shared it with her husband, Frédéric Joliot. Her mother, Marie Curie, was the first woman to win a Nobel Prize.\n\n**Evidence**\n\n- **Marie Curie was the first woman laureate.** The Wikipedia article on her says \"Curie was the first woman to win a Nobel Prize\". It also says \"Marie Curie was the first woman to be awarded a Nobel Prize.\" She won in Physics in 1903 and in Chemistry in 1911. Source: https://en.wikipedia.org/wiki/Marie_Curie\n- **Irène's prize was the 1935 Chemistry prize.** Her Wikipedia article says she \"received the 1935 Nobel Prize in Chemistry with her husband, Frédéric Joliot-Curie\" \"for their discovery of induced radioactivity.\" Source: https://en.wikipedia.org/wiki/Ir%C3%A8ne_Joliot-Curie\n- **Marie was Irène's mother.** The same article calls Irène \"The eldest child of scientists Marie and Pierre Curie\". The Marie Curie article also mentions \"her daughter Irène Joliot-Curie\" among the Nobel winners from the Radium Institute. That second quote came through a summary, not verbatim text.\n\n**Caveats**\n\n- **Wikipedia only.** nobelprize.org returned HTTP 403 to my fetches, so I could not read the primary Nobel pages. All quotes above are from Wikipedia.\n- **Search result, not a page I read.** A search result for the Nobel Foundation's 1935 page gives the citation as \"in recognition of their synthesis of new radioactive elements.\" I did not open that page, so treat the wording as unverified."
+    },
+    {
+      "id": "q11",
+      "arm": "new",
+      "limited": false,
+      "correct": 1,
+      "cited": 3,
+      "supported": 2,
+      "gold": 1,
+      "cost": 0.09753081499999999,
+      "runCost": 0.084106145,
+      "judgeCost": 0.01342467,
+      "tools": [
+        "Read",
+        "ToolSearch",
+        "WebSearch",
+        "Agent",
+        "WebFetch",
+        "WebFetch"
+      ],
+      "judgeTools": 4,
+      "answer": "**Answer: Irène Joliot-Curie won the Nobel Prize in Chemistry in 1935.** She shared it with her husband Frédéric Joliot. Her mother was Marie Curie, the first woman to win a Nobel Prize.\n\nI can't give the verbatim quotes you asked for. The Nobel Prize site returned HTTP 403 to my fetch, and the search only gave me summaries, not page text. Rather than invent quotes, I've paraphrased what the search results said and linked the pages they came from. I haven't checked these claims against the page text myself.\n\n- **Marie Curie was the first woman to win a Nobel Prize.**\n  - The search summary says she shared the 1903 Physics prize, \"the first Nobel ever given to a woman.\" That is my paraphrase of the search summary, not a quote.\n  - She also won Chemistry in 1911.\n  - Sources: [Marie Curie: The First Woman Nobel Laureate, Her Husband & Daughters](https://archive.thedailystar.net/campus/2007/09/05/feature_marie.htm), [Marie Curie biography](https://archive.mith.umd.edu/WomensStudies/ReadingRoom/History/Biographies/curie-marie)\n- **Irène Joliot-Curie won the 1935 Chemistry prize with Frédéric Joliot.** The search summary credits them with the discovery of artificial (induced) radioactivity.\n  - Source: [Nobel Prize biographical page](https://nobelprize.org/prizes/chemistry/1935/joliot-curie/biographical). This is the page that returned 403. I only saw it listed in search results.\n  - Source: [Irène Joliot-Curie on Wikipedia](https://en.wikipedia.org/wiki/Ir%C3%A8ne_Joliot-Curie)\n-"
+    },
+    {
+      "id": "q14",
+      "arm": "baseline",
+      "limited": false,
+      "correct": 1,
+      "cited": 3,
+      "supported": 3,
+      "gold": 1,
+      "cost": 0.11240857,
+      "runCost": 0.081777345,
+      "judgeCost": 0.030631225,
+      "tools": [
+        "Agent",
+        "WebFetch",
+        "WebFetch",
+        "WebFetch",
+        "WebFetch"
+      ],
+      "judgeTools": 5,
+      "answer": "**Answer: 1999.** France gave the Statue of Liberty to the US. France adopted the euro as a non-cash currency on 1 January 1999. Euro notes and coins followed on 1 January 2002.\n\n**Evidence**\n\n- **France gave the statue.**\n  - Source: https://en.wikipedia.org/wiki/Statue_of_Liberty (lead section, read verbatim).\n  - Quote: \"a gift to the United States from the people of France\".\n  - The NPS page I tried first returned a 404, so this is the only source for this claim, and it is a secondary one.\n- **The euro began in 1999.**\n  - Source: https://en.wikipedia.org/wiki/Euro.\n  - The infobox gives \"Date of introduction: 1 January 1999\".\n  - A model-written summary of the page's history section describes the launch as \"The currency was introduced in non-physical form … at midnight on 1 January 1999.\" I did not see that wording verbatim, so check it before quoting it.\n  - The page's history table lists the \"French franc\" among the eleven original currencies fixed on 31 December 1998. That is also from the summary, not verbatim.\n- **Cash came later, in 2002.**\n  - Source: the same Euro page, Banknotes section, verbatim.\n  - Quote: \"Since 1 January 2002, the national central banks (NCBs) and the ECB have issued euro banknotes on a joint basis.\"\n  - This is what makes 1999 the non-cash year.\n\n**What I could not confirm**\n\n- I did not find the exact phrase \"non-cash\" or \"virtual\" on the Euro page.\n- I did not read a plain list of the eleven 1999 member countries in the page text.\n- Neith"
+    },
+    {
+      "id": "q14",
+      "arm": "new",
+      "limited": false,
+      "correct": 1,
+      "cited": 3,
+      "supported": 3,
+      "gold": 1,
+      "cost": 0.11040913,
+      "runCost": 0.0959032,
+      "judgeCost": 0.01450593,
+      "tools": [
+        "Read",
+        "ToolSearch",
+        "WebSearch",
+        "Agent",
+        "Agent",
+        "WebFetch",
+        "WebFetch",
+        "WebFetch"
+      ],
+      "judgeTools": 4,
+      "answer": "**Answer: 1999.** France gave the Statue of Liberty to the United States, and it adopted the euro as non-cash \"book money\" on 1 January 1999.\n\n- **France gave the statue.** Source: https://en.wikipedia.org/wiki/Statue_of_Liberty. Quote: \"The copper-clad statue, a gift to the United States from the people of France, was designed by French sculptor Frédéric Auguste Bartholdi...\"\n- **France adopted the euro as non-cash currency in 1999.** Source: https://en.wikipedia.org/wiki/Adoption_of_the_euro_in_France. Quote: \"starting from 1 January 1999, during which the euro existed as \"book money\"\".\n- **Cash came later, in 2002.** Same source. Quote: \"Euro banknotes and coins were introduced on 1 January 2002.\"\n\n**Caveats:**\n- **Missing skill file:** `.claude/skills/deep-research/SKILL.md` doesn't exist in the working directory, so I did a plain quick-level search instead. I wrote nothing to the vault.\n- **Quotes:** The two quotes above were relayed by fetch subagents, not read by me directly.\n- **Corroboration:** The search results also pointed to the European Commission's page (https://economy-finance.ec.europa.eu/euro/eu-countries-and-euro/france-and-euro_en). I didn't open it, so I'm not quoting it."
+    }
+  ]
+}

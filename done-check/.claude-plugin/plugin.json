@@ -1,0 +1,9 @@
+{
+  "name": "done-check",
+  "version": "0.1.0",
+  "description": "Holds a chat from ending as done while tasks are open or edits came after the last check; writes a Verified status for Switchboard",
+  "author": {
+    "name": "Kenneth Kang"
+  },
+  "license": "MIT"
+}

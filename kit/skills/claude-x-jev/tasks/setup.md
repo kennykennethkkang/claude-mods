@@ -7,7 +7,7 @@ As a Claude Code user installing claude-x-jev, I want setup to tell me exactly w
 </user-story>
 
 <when-to-use>
-- First run after `npx claude-x-jev install`
+- First run after `npx claude-x-jev@0.1.1 install`
 - `context/install.md` says `status: unconfigured`
 - A run failed with "OPENROUTER_API_KEY is not set" or HTTP 401
 </when-to-use>
@@ -28,7 +28,7 @@ Say what will happen in four lines: get an OpenRouter key, put it in the shell e
 </step>
 
 <step name="check_existing">
-Run `[ -n "$OPENROUTER_API_KEY" ] && echo set || echo missing` in Bash. If it prints `set`, the key is already in place; skip to `verify`. If `missing`, continue.
+Run `{ [ -n "$OPENROUTER_API_KEY" ] || security find-generic-password -s switchboard -a OPENROUTER_API_KEY >/dev/null 2>&1; } && echo set || echo missing` in Bash (the second check is a key saved in Switchboard). If it prints `set`, the key is already in place; skip to `verify`. If `missing`, continue.
 </step>
 
 <step name="get_key">
@@ -37,8 +37,9 @@ Give these exact instructions and then wait:
 1. Sign in at https://openrouter.ai (Google or GitHub login works)
 2. Add credits at https://openrouter.ai/settings/credits. Five dollars covers hundreds of thousands of Jev decisions; the same balance also pays for any chat model you route through OpenRouter
 3. Create a key at https://openrouter.ai/settings/keys. Name it `claude-x-jev`. No spend limit is needed for Jev, but set one if the key will also serve chat models
-4. Put it in the shell so every terminal and Claude Code session sees it:
-   - macOS / Linux: append `export OPENROUTER_API_KEY=sk-or-v1-...` to `~/.zshrc` or `~/.bashrc`, then `source` that file
+4. Save it where jev.py finds it:
+   - Switchboard (preferred): Settings, Accounts, API keys, paste it under Jev / OpenRouter, press Save. It goes to the macOS Keychain and Test shows it works; no restart needed
+   - macOS / Linux without Switchboard: append `export OPENROUTER_API_KEY=sk-or-v1-...` to `~/.zshrc` or `~/.bashrc`, then `source` that file
    - Windows: `setx OPENROUTER_API_KEY "sk-or-v1-..."` in PowerShell, then open a new terminal
 5. Restart Claude Code so its Bash tool inherits the variable
 
@@ -66,7 +67,7 @@ Offer, do not require, the OpenRouter MCP. It gives `/jev-status` richer data (c
 
     claude mcp add --transport http openrouter https://mcp.openrouter.ai/mcp --header "Authorization: Bearer $OPENROUTER_API_KEY"
 
-Then restart Claude Code. Record the answer either way.
+Say first that this writes the key in plain text into `~/.claude.json`. Then restart Claude Code. Record the answer either way.
 </step>
 
 <step name="pin_model">

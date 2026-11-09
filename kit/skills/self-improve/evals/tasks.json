@@ -1,0 +1,41 @@
+[
+  {
+    "id": "release-note",
+    "target": "ops",
+    "split": "dev",
+    "prompt": "Use the ops subagent to write the release note for Switchboard 0.21.5 from these facts: the to-do list now sorts by due date; the usage meter no longer flickers on reload; the Sign ins page lists the Codex account. Return only the note.",
+    "checklist": [
+      "Names version 0.21.5.",
+      "Covers all three facts: to-do sorting, usage meter flicker fix, Codex account on Sign ins.",
+      "Contains no em dash character.",
+      "Under 120 words.",
+      "Uses none of these words: seamless, robust, leverage, delve, effortless."
+    ]
+  },
+  {
+    "id": "vsix-checklist",
+    "target": "ops",
+    "split": "heldout",
+    "prompt": "Use the ops subagent to write a short checklist for shipping a new Switchboard vsix. Facts: tests run with npm test in extension/; the version lives in extension/package.json; CHANGELOG.md gets a new section; the build is npm run package; Kenneth commits and pushes himself. Return only the checklist.",
+    "checklist": [
+      "Is a bulleted or numbered checklist.",
+      "Includes running the tests (npm test).",
+      "Includes the version bump in extension/package.json and a CHANGELOG.md entry.",
+      "Leaves commit and push to Kenneth, and does not tell the agent to commit or push.",
+      "Contains no em dash character."
+    ]
+  },
+  {
+    "id": "handoff-standup",
+    "target": "ops",
+    "split": "heldout",
+    "prompt": "Use the ops subagent to write the finishing standup for Kenneth. Facts: tests pass 42 of 42; the new icon set is not started; the window must be reloaded by hand to load the new build; a usage limit might interrupt the next run. Sections: Done, For you, Left, Risks. Return only the standup.",
+    "checklist": [
+      "Has Done, For you, Left and Risks sections.",
+      "For you holds only the manual window reload, nothing an agent could do.",
+      "Left lists the icon set.",
+      "Reports tests as 42 of 42 or 42/42.",
+      "Contains no em dash character and is under 100 words."
+    ]
+  }
+]

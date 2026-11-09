@@ -1,0 +1,24 @@
+{
+  "name": "cache-keeper",
+  "version": "0.1.0",
+  "description": "Keeps an idle chat's prompt cache warm with a silent ping just before it expires, and shows warm or cold above the prompt and in Switchboard",
+  "author": {
+    "name": "Kenneth Kang"
+  },
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "ttlMinutes": {
+      "type": "number",
+      "title": "Cache lifetime (minutes)",
+      "description": "How long the prompt cache lives after a request. 60 on a subscription, 5 in usage overage or on an API key.",
+      "default": 60
+    },
+    "idleHours": {
+      "type": "number",
+      "title": "Stop after idle (hours)",
+      "description": "Stop pinging once the chat has sat idle this long.",
+      "default": 3
+    }
+  },
+  "license": "MIT"
+}
