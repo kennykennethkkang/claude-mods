@@ -256,12 +256,11 @@ export function mergeCodexHooks(cfg, command) {
   return { ...cfg, hooks }
 }
 
-// Same list as GUARD_MODS in codex-hooks.mjs, which an installed copy cannot import from here.
-export const CODEX_GUARD_MODS = ['bash-approve', 'repo-rules', 'done-check', 'account-guard', 'phone-mode', 'paid-guard', 'tab-close']
 /** The files of an installed Codex guard, as [path, text]: the hook beside type-stripped copies of the mods it loads. */
 export const codexGuardFiles = (read, strip) => [
   ['codex-hooks.mjs', read('kit/codex-hooks.mjs')],
-  ...CODEX_GUARD_MODS.map(m => [`${m}/hooks/register.mjs`, strip(read(`${m}/hooks/register.ts`))]),
+  ['guard-mods.json', read('kit/guard-mods.json')],
+  ...JSON.parse(read('kit/guard-mods.json')).map(m => [`${m}/hooks/register.mjs`, strip(read(`${m}/hooks/register.ts`))]),
 ]
 
 /** Marks a ~/.claude/rules file the kit wrote; same text in Switchboard's hub/rules.ts. */

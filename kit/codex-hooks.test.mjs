@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { GUARD_MODS, fallbackDeny, refreshCopy, preToolUse, paidGuard, tabsHold, post, stop, rolloutRows } from './codex-hooks.mjs'
-import { CODEX_GUARD_MODS, codexGuardFiles, codexRoleNames, mergeCodexHooks } from './kit.mjs'
+import { codexGuardFiles, codexRoleNames, mergeCodexHooks } from './kit.mjs'
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), '..')
 const runHook = (file, payload) => spawnSync(process.execPath, ['--no-warnings', file], { input: JSON.stringify(payload), encoding: 'utf8' })
@@ -225,11 +225,11 @@ test('an installed copy rebuilds a mod the repo changed after install', () => {
   const guard = mkdtempSync(join(tmpdir(), 'guard-'))
   try {
     // A fake repo: the real hook and mods, then bash-approve edited to refuse a marker command.
-    for (const rel of ['kit/codex-hooks.mjs', ...GUARD_MODS.map(m => `${m}/hooks/register.ts`)]) {
+    for (const rel of ['kit/codex-hooks.mjs', 'kit/guard-mods.json', ...GUARD_MODS.map(m => `${m}/hooks/register.ts`)]) {
       mkdirSync(dirname(join(root, rel)), { recursive: true })
       writeFileSync(join(root, rel), readFileSync(join(REPO, rel)))
     }
-    assert.equal(refreshCopy(guard, root), 1 + GUARD_MODS.length)
+    assert.equal(refreshCopy(guard, root), 2 + GUARD_MODS.length)
     writeFileSync(join(guard, 'source.json'), JSON.stringify({ root }))
     assert.equal(refreshCopy(guard, root), 0)
     const ba = join(root, 'bash-approve/hooks/register.ts')
@@ -241,8 +241,10 @@ test('an installed copy rebuilds a mod the repo changed after install', () => {
   } finally { rmSync(root, { recursive: true, force: true }); rmSync(guard, { recursive: true, force: true }) }
 })
 
-test('the hook and kit.mjs list the same guard mods', () => {
-  assert.deepEqual(GUARD_MODS, CODEX_GUARD_MODS)
+test('the installed guard carries every mod in guard-mods.json', () => {
+  const files = codexGuardFiles(r => readFileSync(join(REPO, r), 'utf8'), stripTypeScriptTypes).map(([p]) => p)
+  assert.deepEqual(GUARD_MODS, JSON.parse(readFileSync(join(REPO, 'kit/guard-mods.json'), 'utf8')))
+  for (const m of GUARD_MODS) assert.ok(files.includes(`${m}/hooks/register.mjs`), m)
 })
 
 const withHomeAsync = async (files, fn) => {

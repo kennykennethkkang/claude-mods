@@ -1,8 +1,17 @@
 import { expect, test } from 'claude-code/testing'
 import type { EngineInterface, SessionContextBreakdown } from 'claude-code'
 
-import { agentFileModel, cleanReport, debugBrief, escalationNote, learnRun, memoryDir, pickModel, type Learned, type Run } from '../hooks/register.ts'
-import { carryGoal, indefiniteOn, indefiniteStop, indefiniteDenial, indefiniteAsk, branchFor, budgetDenial, creditsIn, deliver, poll, dietOf, endsAsking, ensureOpenTasks, handoffDenial, handoffNote, homeOf, jevRun, heldNow, noteActive, holdDenial, holdLine, holdTick, hubHold, overLimit, untilText, liveShells, maybeHandoff, nearFull, norm, notePlan, noteShell, noteTasks, ownerOf, pausedDenial, redact, restoreFeed, shellsDone, summaryOf, targetsOf } from '../hooks/register.ts'
+import { budgetDenial, pausedDenial } from '../hooks/company.ts'
+import { creditsIn, deliver, dietOf, jevRun, ownerOf, poll } from '../hooks/feed.ts'
+import { branchFor } from '../hooks/branch-name.ts'
+import { endsAsking, handoffDenial, maybeHandoff, nearFull, notePlan, noteTasks, restoreFeed } from '../hooks/handoff.ts'
+import { ensureOpenTasks, handoffNote, summaryOf } from '../hooks/handoff-note.ts'
+import { homeOf, norm, targetsOf } from '../hooks/hub.ts'
+import { carryGoal, indefiniteAsk, indefiniteDenial, indefiniteOn, indefiniteStop } from '../hooks/indefinite.ts'
+import { heldNow, holdDenial, holdLine, holdTick, hubHold, noteActive, overLimit, untilText } from '../hooks/limits.ts'
+import { agentFileModel, cleanReport, debugBrief, escalationNote, learnRun, memoryDir, pickModel, type Learned, type Run } from '../hooks/model.ts'
+import { redact } from '../hooks/redact.ts'
+import { liveShells, noteShell, shellsDone } from '../hooks/shells.ts'
 
 test('reports to every Switchboard window, whatever folder it has open', () => {
   const files = [
@@ -705,6 +714,25 @@ test('the fresh chat is told to restate the goal and tick the open tasks against
   expect(told).toMatch(/tick each open task/i)
 })
 
+test('redact covers Authorization, Basic, url passwords with @, short stripe keys and two-part JWTs', () => {
+  const cases: Array<[string, string]> = [
+    ['Authorization: Basic dXNlcjpwYXNzd29yZA==', 'dXNlcjpw'],
+    ['Authorization: Token abcdefgh123', 'abcdefgh123'],
+    ['curl -H "Authorization: abcdefgh123"', 'abcdefgh123'],
+    ['Basic dXNlcjpwYXNzd29yZA== sent', 'dXNlcjpw'],
+    ['postgres://admin:p@ss@word@db.local/app', 'word'],
+    ['pk' + '-abcdefghijklmnop1234', 'abcdefghijklmnop'],
+    ['pay ' + 'pk' + '_live_abc123', 'abc123'],
+    ['jwt ' + 'eyJ' + 'abcdefghij.klmnopqrst', 'klmnopqrst'],
+  ]
+  for (const [text, bad] of cases) {
+    const clean = redact(text)
+    expect(clean.includes(bad)).toBe(false)
+    expect(clean).toContain('[removed]')
+  }
+  expect(redact('Basic authentication is old')).toBe('Basic authentication is old')
+})
+
 test('redact catches cloud keys, live and test keys, passwords and bearer tokens', () => {
   const cases: Array<[string, string]> = [
     ['aws_secret_access_key = wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY', 'wJalrXUtnFEMI'],
@@ -735,9 +763,9 @@ test('redact catches cloud keys, live and test keys, passwords and bearer tokens
     ['hf hf_abcdefghijklmnopqrstuvwxyz12', 'hf_abcdefgh'],
     ['gitlab glpat-abcdefghij1234567890', 'glpat-abcd'],
     ['npm npm_abcdefghijklmnopqrstuvwxyz0123456789', 'npm_abcdefgh'],
-    ['gh gho_0123456789abcdefghij0123456789ABCD', 'gho_0123'],
+    ['gh gh' + 'o_0123456789abcdefghij0123456789ABCD', 'gho_0123'],
     ['pat github_pat_11ABCDEFG0123456789_abcdefghij', 'github_pat_11'],
-    ['slack xoxp-1234-5678-abcdefghijkl', 'xoxp-1234'],
+    ['slack xo' + 'xp-1234-5678-abcdefghijkl', 'xoxp-1234'],
     ['aws AKIAIOSFODNN7EXAMPLE', 'AKIAIOSFODNN7'],
     ['git clone https://kenneth:s3cretpass@github.com/x/y.git', 's3cretpass'],
     ['mysql -u root -pS3cret db', 'S3cret'],
@@ -1658,7 +1686,7 @@ test('run indefinitely blocks a stop until the answer ends with the done line', 
   expect(block).toMatch(/^Run indefinitely is on\. Do another round/)
   expect(block).toContain('Run indefinitely: done')
   expect(block).not.toContain('\u2014')
-  expect(await indefiniteStop($, 'again')).toBeDefined()
+  expect(await indefiniteStop($, 'again')).toMatch(/^Run indefinitely is on/)
   expect(s.posts).toEqual([])
   expect(await indefiniteStop($, 'Nothing left.\nRun indefinitely: done  \n')).toBeUndefined()
   expect(s.posts.some(p => p.includes('"kind":"indefinite-done"') && p.includes('"sessionId":"j1"'))).toBe(true)
@@ -1679,7 +1707,7 @@ test('run indefinitely denies asking after the first stop, not before', async ()
   f.l1 = s.now
   // up-front round
   expect(await indefiniteDenial($, 'AskUserQuestion')).toBeUndefined()
-  expect(await indefiniteDenial($, 'mcp__switchboard__ask')).toBeDefined()
+  expect(await indefiniteDenial($, 'mcp__switchboard__ask')).toMatch(/^Run indefinitely is on: decide yourself/)
   await indefiniteStop($, 'round one done')
   const why = 'Run indefinitely is on: decide yourself and say what you decided.'
   expect(await indefiniteDenial($, 'AskUserQuestion')).toBe(why)
@@ -1692,7 +1720,7 @@ test('a handoff chat with an old flag gets no second up-front round', async () =
   const f: Record<string, number> = {}
   const { $, s } = indDouble({ id: 'h1', flags: f })
   f.h1 = s.now - 3_600_000
-  expect(await indefiniteDenial($, 'AskUserQuestion')).toBeDefined()
+  expect(await indefiniteDenial($, 'AskUserQuestion')).toMatch(/^Run indefinitely is on: decide yourself/)
 })
 
 test('run indefinitely swaps the ask rule', async () => {
@@ -1756,7 +1784,7 @@ test('a cost or hours cap lets the stop through as not a success', async () => {
   expect(await indefiniteStop(c.$, 'r')).toBeUndefined()
   expect(doneOf(c.s.posts)[0].reason).toBe('budget reached (not a success)')
   const under = indDouble({ id: 'b2', flags: { b2: { onAt: 1e12, maxCostUsd: 5 } }, cost: 1 })
-  expect(await indefiniteStop(under.$, 'r')).toBeDefined()
+  expect(await indefiniteStop(under.$, 'r')).toMatch(/^Run indefinitely is on/)
   const h = indDouble({ id: 'b3', flags: { b3: { onAt: 1, maxHours: 1 } } })
   expect(await indefiniteStop(h.$, 'r')).toBeUndefined()
   expect(doneOf(h.s.posts)[0].reason).toBe('budget reached (not a success)')
@@ -1773,7 +1801,7 @@ test('a failing gate at the cap still stops, and the gate wins when it passes', 
 
 test('with no limits the done line still posts a usage line and no reason', async () => {
   const { $, s } = indDouble({ id: 'u1', flags: { u1: 1e12 }, cost: 2 })
-  expect(await indefiniteStop($, 'r')).toBeDefined()
+  expect(await indefiniteStop($, 'r')).toMatch(/^Run indefinitely is on/)
   expect(s.runs).toEqual([])
   await indefiniteStop($, 'x\nRun indefinitely: done')
   const [d] = doneOf(s.posts)

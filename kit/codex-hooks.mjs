@@ -11,14 +11,18 @@ import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
-export const GUARD_MODS = ['bash-approve', 'repo-rules', 'done-check', 'account-guard', 'phone-mode', 'paid-guard', 'tab-close']
+// Setup copies guard-mods.json beside this file; absent, the hook runs on the fallback list alone.
+export const GUARD_MODS = (() => { try { return JSON.parse(readFileSync(join(HERE, 'guard-mods.json'), 'utf8')) } catch { return [] } })()
 
 /** Copies any repo file newer than its copy in `here`, mods type-stripped; the number copied. Needs Node 22.13+, else 0. */
 export function refreshCopy(here, root) {
   const strip = nodeModule.stripTypeScriptTypes
   if (!strip || !existsSync(root)) return 0
   let n = 0
-  for (const [to, from, ts] of [['codex-hooks.mjs', 'kit/codex-hooks.mjs', false], ...GUARD_MODS.map(m => [`${m}/hooks/register.mjs`, `${m}/hooks/register.ts`, true])]) {
+  // read the repo's list, so an install missing guard-mods.json still gets every mod this run
+  let mods = GUARD_MODS
+  try { mods = JSON.parse(readFileSync(join(root, 'kit/guard-mods.json'), 'utf8')) } catch { /* keep the local list */ }
+  for (const [to, from, ts] of [['codex-hooks.mjs', 'kit/codex-hooks.mjs', false], ['guard-mods.json', 'kit/guard-mods.json', false], ...mods.map(m => [`${m}/hooks/register.mjs`, `${m}/hooks/register.ts`, true])]) {
     try {
       const src = join(root, from), dest = join(here, to)
       if (statSync(src).mtimeMs <= (statSync(dest, { throwIfNoEntry: false })?.mtimeMs ?? 0)) continue

@@ -13,7 +13,7 @@ const result = (id, content, is_error = true) => ({ type: 'user', message: { con
 
 test('redacts keys, tokens and assignments', () => {
   // Split so the bundler's secret check does not flag this file.
-  const s = redact(`key ${'sk'}-ant-api03-abcdefghijklmnopqrstuvwxyz and ${'gh'}p_abcdefghijklmnopqrstuvwxyz0123456789 and API_KEY=hunter22 Bearer abc.def.ghi`)
+  const s = redact(`key ${'sk'}-ant-api03-abcdefghijklmnopqrstuvwxyz and ${'gh'}p_abcdefghijklmnopqrstuvwxyz0123456789 and API_KEY=hunter22 Bearer abc.def.ghi-0123456789`)
   assert.doesNotMatch(s, /abcdefghijklmnop|hunter22|abc\.def/)
   assert.match(s, /\[redacted\]/)
   assert.equal(redact('plain words stay'), 'plain words stay')
@@ -31,6 +31,25 @@ test('redacts stripe, google, json-quoted, url and hex secrets', () => {
   }
   for (const [input, secret] of Object.entries(cases)) assert.ok(!redact(input).includes(secret), `${input} -> ${redact(input)}`)
   assert.match(redact('db postgres://admin:hunter22@db.local:5432/app'), /^db postgres:\/\/admin:\[redacted\]@db\.local:5432\/app$/)
+})
+
+test('redacts the secret shapes shared with usage-meter', () => {
+  const cases = {
+    'aws_secret_access_key = wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY': 'wJalrXUtnFEMI',
+    'PGPASSWORD=hunter2 psql': 'hunter2',
+    'password: hunter2secret': 'hunter2',
+    'mysql --password hunter2x -u root': 'hunter2x',
+    'mysql -u root -pS3cret db': 'S3cret',
+    // Split so vsce's package secret scan does not read the fixtures as real tokens.
+    ['pat github' + '_pat_11ABCDEFG0123456789_abcdefghij']: 'github_pat_11',
+    ['hf h' + 'f_abcdefghijklmnopqrstuvwxyz12']: 'hf_abcdefgh',
+    ['gitlab gl' + 'pat-abcdefghij1234567890']: 'glpat-abcd',
+    ['npm np' + 'm_abcdefghijklmnopqrstuvwxyz0123456789']: 'npm_abcdefgh',
+    ['slack xo' + 'xs-1234-5678-abcdefghijkl']: 'xoxs-1234',
+    ['gh gh' + 'o_0123456789abcdefghij0123456789ABCD']: 'gho_0123',
+  }
+  for (const [input, secret] of Object.entries(cases)) assert.ok(!redact(input).includes(secret), `${input} -> ${redact(input)}`)
+  assert.equal(redact('Basic authentication is old'), 'Basic authentication is old')
 })
 
 test('redacts quoted values with spaces, @ in url passwords and auth headers', () => {

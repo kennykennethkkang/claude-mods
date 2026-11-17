@@ -251,3 +251,16 @@ test('path rules: marked copies for ~/.claude/rules, bodies appended for Codex',
   assert.equal(withPathRules('# Rules\n', r), '# Rules\n\nWrite tests first.\n')
   assert.equal(withPathRules('# Rules\n', []), '# Rules\n')
 })
+
+// usage-meter's redact.ts and the standalone improve-system scan.mjs keep their own copy of the secret
+// patterns. The usage-meter test sandbox cannot read outside its folder, so the drift check lives here.
+test('redact.ts and scan.mjs hold the same secret patterns', async () => {
+  const { readFileSync } = await import('node:fs')
+  const block = f => {
+    const s = readFileSync(new URL(f, import.meta.url), 'utf8')
+    return s.slice(s.indexOf('// patterns:begin'), s.indexOf('// patterns:end')).split('\n').slice(1).filter(l => l.trim() && !l.trim().startsWith('//'))
+  }
+  const mine = block('../usage-meter/hooks/redact.ts')
+  assert.ok(mine.length > 20)
+  assert.deepEqual(block('./skills/improve-system/scripts/scan.mjs'), mine)
+})
