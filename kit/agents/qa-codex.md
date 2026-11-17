@@ -20,7 +20,7 @@ End with a Report: Status (done, done with concerns, blocked), Found (verified p
 
 BRIEF
 SWITCHBOARD_BRIEF
-SWITCHBOARD_ROLE_RUN=qa-codex codex exec --ephemeral --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox --dangerously-bypass-hook-trust --color never -o "$d/last" - < "$d/prompt" > "$d/log" 2>&1
+SWITCHBOARD_ROLE_RUN=qa-codex codex exec -m gpt-5.6-luna -c model_reasoning_effort=high --ephemeral --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox --dangerously-bypass-hook-trust --color never -o "$d/last" - < "$d/prompt" > "$d/log" 2>&1
 echo "codex exit $?"; cat "$d/last" 2>/dev/null || tail -40 "$d/log"; rm -rf "$d"
 ```
 

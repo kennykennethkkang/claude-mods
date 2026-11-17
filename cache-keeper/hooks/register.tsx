@@ -85,11 +85,23 @@ function schedule($: EngineInterface, at: number, now: number) {
   timer = $.clock.after(Math.max(0, at - now), () => { void ping($, mine).catch(() => undefined) })
 }
 
+// ponytail: sees the hold only through limits.json, which the Switchboard hub writes. A chat
+// usage-meter holds on its own (no window open) still pings; share the hold file if that costs.
+async function hubHeld($: EngineInterface, now: number) {
+  const home = ((await $.env.get('HOME')) ?? (await $.env.get('USERPROFILE')) ?? '').replace(/\\/g, '/')
+  try {
+    const l = JSON.parse(String(await $.fs.read(`${home}/.claude/switchboard/limits.json`)))
+    return l.paused === true && (typeof l.pause?.resumeAt === 'number' ? l.pause.resumeAt : Infinity) > now
+  } catch { return false }
+}
+
 async function ping($: EngineInterface, mine: number) {
   const k = await read($, keep)
   if (k?.busy || mine !== gen || k?.state !== 'warm') return
   const now = await $.clock.now()
   if (now - k.idleSince >= idleCap) return set($, { ...k, state: 'off', now })
+  // Held at the usage limit: a fork is a paid call, and the cache is long gone by the reset.
+  if (await hubHeld($, now)) return set($, { ...k, state: 'off', now })
   forking = true
   const r = await $.model.fork({ prompt: PROMPT }).finally(() => { forking = false })
   if ((await read($, keep))?.busy || mine !== gen) return

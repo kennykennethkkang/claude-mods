@@ -1,0 +1,333 @@
+{
+  "date": "2026-11-10T20:37:10.182Z",
+  "level": "standard",
+  "models": {
+    "arms": "sonnet",
+    "judges": [
+      "sonnet"
+    ]
+  },
+  "claims": "all",
+  "summary": {
+    "baseline": {
+      "n": 4,
+      "correct": 0.75,
+      "gold": 0.75,
+      "citation": 0.952,
+      "cost": 0.677
+    },
+    "new": {
+      "n": 4,
+      "correct": 0.75,
+      "gold": 1,
+      "citation": 0.87,
+      "cost": 0.917
+    }
+  },
+  "byJudge": {
+    "baseline/sonnet": {
+      "n": 4,
+      "correct": 0.75,
+      "gold": 0.75,
+      "citation": 0.952,
+      "cost": 0.291
+    },
+    "new/sonnet": {
+      "n": 4,
+      "correct": 0.75,
+      "gold": 1,
+      "citation": 0.87,
+      "cost": 0.345
+    }
+  },
+  "rows": [
+    {
+      "id": "q27",
+      "arm": "baseline",
+      "limited": false,
+      "correct": 0,
+      "cited": 7,
+      "supported": 7,
+      "judges": [
+        {
+          "model": "sonnet",
+          "correct": 0,
+          "cited": 7,
+          "supported": 7,
+          "cost": 0.07797478499999999,
+          "tools": 3
+        }
+      ],
+      "gold": 1,
+      "cost": 0.17288806999999998,
+      "runCost": 0.09491328499999999,
+      "judgeCost": 0.07797478499999999,
+      "tools": [
+        "Agent",
+        "WebFetch",
+        "WebFetch",
+        "Agent",
+        "WebFetch",
+        "WebFetch"
+      ],
+      "answer": "**Answer:** The Winter Palace was stormed on the night of 7–8 November 1917 (Gregorian). The main assault and capture came in the early hours of 8 November, which is 26 October in the Julian calendar. The uprising as a whole began on 7 November (25 October Julian). Many sources give 7 November as \"the\" date because that is the day the revolution began.\n\nI could not fully verify the 8 November capture date. It rests on summarized text, not verbatim quotes, and I did not open a second independent source.\n\n**Verified verbatim (Wikipedia, https://en.wikipedia.org/wiki/October_Revolution, read via fetch):**\n- Lead: \"It began through an insurrection in Petrograd (now Saint Petersburg) on 7 November 1917 [O.S. 25 October].\"\n- Infobox: \"7 November 1917 [O.S. 25 October]\". This is the start of the uprising, not specifically the palace capture.\n- Image caption: \"The Winter Palace of Petrograd, one day after the insurrection, 8 November\".\n- Historiography section: \"The date 7 November, the anniversary of the October Revolution according to the Gregorian Calendar, was the official national day of the Soviet Union from 1918 onward...\"\n\n**Not verified verbatim (summary-extracted only):**\n- Lead: \"In the early morning of 26 October [N.S. 8 November], they captured the Winter Palace\".\n- \"By 2:10 a.m. on 26 October, Bolshevik forces had gained control.\"\n- The name: \"Despite occurring in November of the Gregorian calendar, the event is most commonly known as the October Revolution... because at the time Russia still used the Julian calendar.\"\n\n**Could not get:** Britannica returned HTTP 403, and the \"Assault on the Winter Palace\" section text was never read directly. I did not check the page date, and Wikipedia is a secondary source. A primary or scholarly source would be better for the exact hour."
+    },
+    {
+      "id": "q27",
+      "arm": "new",
+      "limited": false,
+      "correct": 0,
+      "cited": 5,
+      "supported": 3,
+      "judges": [
+        {
+          "model": "sonnet",
+          "correct": 0,
+          "cited": 5,
+          "supported": 3,
+          "cost": 0.09563496499999999,
+          "tools": 6
+        }
+      ],
+      "gold": 1,
+      "cost": 0.23029677499999998,
+      "runCost": 0.13466181,
+      "judgeCost": 0.09563496499999999,
+      "tools": [
+        "Read",
+        "ToolSearch",
+        "WebSearch",
+        "Agent",
+        "WebFetch",
+        "WebFetch",
+        "WebFetch",
+        "Agent",
+        "WebFetch",
+        "WebFetch"
+      ],
+      "answer": "**Answer:** The Winter Palace was stormed on the night of 7–8 November 1917 (Gregorian). The Bolsheviks controlled it by about 2:10 a.m. on 8 November, which is 26 October in the Julian calendar. The revolution as a whole is conventionally dated 7 November (25 October Old Style).\n\n**Confidence:** High for the 7 November (revolution) and 8 November (palace captured) dates. Medium on the exact night split, because sources differ on which night they assign.\n\n**Depth:** Standard. I made one search and two page-reading passes. I did not use the vault, and I wrote nothing to it.\n\n## Findings\n\n- The revolution's start is dated 7 November 1917 (25 October Old Style).\n  - Source: https://en.wikipedia.org/wiki/October_Revolution\n  - Quote: \"It began through an insurrection in Petrograd (now Saint Petersburg) on 7 November 1917 [O.S. 25 October].\"\n- The palace itself was captured in the early hours of 8 November Gregorian (26 October Julian).\n  - Source: https://en.wikipedia.org/wiki/Storming_of_the_Winter_Palace. This URL redirects to the October Revolution article.\n  - Quote: \"In the early morning of 26 October [N.S. 8 November], they captured the Winter Palace\"\n  - Quote on timing: \"By 2:10 a.m. on 26 October, Bolshevik forces had gained control.\"\n  - The page does not label that 2:10 a.m. sentence as Old Style. I inferred it from the article's convention of giving both calendars.\n- The Julian-to-Gregorian offset in 1917 was 13 days. 25 October Old Style plus 13 days is 7 November, and 26 October is 8 November.\n  - I did not cite a separate source for the offset. It is arithmetic, and both Wikipedia date pairs agree with it.\n\n## Conflicts and gaps\n\n- **One source gives a different night.**\n  - Source: https://historycollection.com/russian-revolution-dates-february-october-1917/\n  - It says \"On the night of October 24-25 by the Julian calendar — November 7, 1917 by the Gregorian calendar — Bolshevik Red Guards...\"\n  - That is a tertiary source and differs from Wikipedia. I trust the Wikipedia dating more because it gives a specific 2:10 a.m. time for the palace.\n- **\"7 November\" can mean two things.** It is the date of the insurrection's start, and many sources use it loosely for the storming. The palace fell after midnight, on 8 November.\n- **I could not read Britannica.** The page returned 403, so I did not use it.\n- **Wikipedia is the only source for the palace-capture date.** I did not find an independent second source for that detail.\n- **I could not check the last ~74,000 characters of the Wikipedia article.**\n\n## Sources\n\n[1] October Revolution, Wikipedia. https://en.wikipedia.org/wiki/October_Revolution\n[2] Storming of the Winter Palace, Wikipedia (redirects to [1]). https://en.wikipedia.org/wiki/Storming_of_the_Winter_Palace\n[3] Russian Revolution dates, History Collection. https://historycollection.com/russian-revolution-dates-february-october-1917/"
+    },
+    {
+      "id": "q45",
+      "arm": "baseline",
+      "limited": false,
+      "correct": 1,
+      "cited": 4,
+      "supported": 4,
+      "judges": [
+        {
+          "model": "sonnet",
+          "correct": 1,
+          "cited": 4,
+          "supported": 4,
+          "cost": 0.076429625,
+          "tools": 4
+        }
+      ],
+      "gold": 0,
+      "cost": 0.17042312000000004,
+      "runCost": 0.09399349500000002,
+      "judgeCost": 0.076429625,
+      "tools": [
+        "WebFetch",
+        "WebFetch",
+        "Agent",
+        "WebFetch",
+        "WebFetch",
+        "WebFetch",
+        "WebFetch",
+        "Agent",
+        "WebFetch",
+        "WebFetch",
+        "WebFetch",
+        "WebFetch",
+        "WebFetch"
+      ],
+      "answer": "**Answer:** Lê Đức Thọ declined the 1973 Nobel Peace Prize. Henry Kissinger accepted it, but in absentia. He did not go to the Oslo ceremony.\n\n**Sources.** Only Wikipedia was readable, and a subagent fetched it for me. I did not read these pages myself. The Nobel Prize site (nobelprize.org) returned HTTP 403, so I have no primary-source confirmation. The quotes below are the subagent's verbatim report.\n\n- Declined and accepted: https://en.wikipedia.org/wiki/1973_Nobel_Peace_Prize says, \"Thọ declined to accept the prize, and Kissinger accepted *in absentia*.\"\n- Kissinger's absence: the same page's Ceremony section says, \"Kissinger declined to attend, concerned that the event would be targeted by anti-war protestors.\" The ceremony was on 10 December 1973, and his acceptance letter was read there by committee chair Aase Lionaes.\n- Thọ's reason: the Reactions section reports he declined, \"stating that 'such bourgeois sentimentalities' were not for him.\" He also cited the fighting that continued in Vietnam.\n- Kissinger as co-laureate: https://en.wikipedia.org/wiki/Henry_Kissinger says, \"For his role in negotiating the accords, he was awarded the 1973 Nobel Peace Prize.\"\n\n**Not verified:**\n- Anything from nobelprize.org itself, because every page there was blocked.\n- The claim that Thọ is the only person ever to decline the Peace Prize. The subagent saw it only in a summary, not verbatim.\n- The reported dates of the Wikipedia pages. They are live pages, and no revision date was captured."
+    },
+    {
+      "id": "q45",
+      "arm": "new",
+      "limited": false,
+      "correct": 1,
+      "cited": 4,
+      "supported": 4,
+      "judges": [
+        {
+          "model": "sonnet",
+          "correct": 1,
+          "cited": 4,
+          "supported": 4,
+          "cost": 0.077855775,
+          "tools": 6
+        }
+      ],
+      "gold": 1,
+      "cost": 0.214164085,
+      "runCost": 0.13630831000000002,
+      "judgeCost": 0.077855775,
+      "tools": [
+        "Read",
+        "ToolSearch",
+        "WebSearch",
+        "WebFetch",
+        "Agent",
+        "WebFetch",
+        "WebFetch",
+        "WebFetch",
+        "WebFetch",
+        "WebFetch",
+        "WebFetch",
+        "Agent",
+        "WebFetch",
+        "WebFetch",
+        "WebFetch",
+        "WebFetch",
+        "WebFetch"
+      ],
+      "answer": "**Answer:** Le Duc Tho of North Vietnam declined the 1973 Nobel Peace Prize. Henry Kissinger accepted it, though he did not travel to Oslo for the ceremony.\n\n**Confidence:** High on who declined and who accepted. Medium on the ceremony details, because nobelprize.org and Britannica refused my fetches (HTTP 403).\n\n**Depth:** standard. I did not check the vault, since you said not to write to it.\n\n## Findings\n\n- **Le Duc Tho declined.** TIME: \"in 1973 Le Duc Tho became the first and only person ever to voluntarily refuse a Nobel Peace Prize.\" https://time.com/4061794/nobel-peace-prize-winner-history/ (re-read)\n- **Tho's stated reason.** Reuters, via Yahoo: \"Le Duc Tho refused the Peace Prize on the grounds peace had not yet been established.\" https://ca.news.yahoo.com/nobel-prize-body-knew-kissingers-164340317.html (re-read)\n- **Kissinger accepted.** The same Reuters piece says: \"Kissinger, while accepting the award, did not travel to Norway for the ceremony.\" https://ca.news.yahoo.com/nobel-prize-body-knew-kissingers-164340317.html (re-read)\n- **Joint award.** Wikipedia: \"For his role in negotiating the accords, he was awarded the 1973 Nobel Peace Prize.\" https://en.wikipedia.org/wiki/Henry_Kissinger (re-read)\n\n## Conflicts and gaps\n\n- A summary of the Wikipedia article says Kissinger wrote \"I have accordingly designated Ambassador Byrne to represent me on that occasion.\" I did not see that sentence verbatim, so I am not relying on it.\n- Reuters reports that Kissinger \"tried to return the prize\" by cable on May 1, 1975, and the committee refused to take it back.\n- Some sources add other motives for Tho's refusal, such as not wanting to share the prize with Kissinger. I did not verify these.\n- The search results quoted Britannica and the nobelprize.org laureate pages as saying Tho declined. I could not open either site, so I haven't cited them.\n\n## Sources\n\n[1] TIME, \"Why a Nobel Peace Prize Was Once Rejected\". https://time.com/4061794/nobel-peace-prize-winner-history/\n[2] Reuters via Yahoo News, \"Nobel Prize body knew Kissinger's 1973 Vietnam deal unlikely to bring peace\". https://ca.news.yahoo.com/nobel-prize-body-knew-kissingers-164340317.html\n[3] Wikipedia, \"Henry Kissinger\". https://en.wikipedia.org/wiki/Henry_Kissinger"
+    },
+    {
+      "id": "q46",
+      "arm": "baseline",
+      "limited": false,
+      "correct": 1,
+      "cited": 7,
+      "supported": 7,
+      "judges": [
+        {
+          "model": "sonnet",
+          "correct": 1,
+          "cited": 7,
+          "supported": 7,
+          "cost": 0.077066435,
+          "tools": 6
+        }
+      ],
+      "gold": 1,
+      "cost": 0.18289157,
+      "runCost": 0.10582513500000001,
+      "judgeCost": 0.077066435,
+      "tools": [
+        "ToolSearch",
+        "WebFetch",
+        "Agent",
+        "WebSearch",
+        "WebFetch",
+        "WebFetch",
+        "WebFetch",
+        "Agent",
+        "WebFetch",
+        "WebFetch"
+      ],
+      "answer": "**Linux 0.01 was released on 17 September 1991.** It was uploaded to a FUNET FTP server without an announcement. The 25 August 1991 date is the Usenet announcement, not the release.\n\n**Sources**\n\n- **Linux Magazine, \"Linus Torvalds Confirms the Date of the First Linux Release\"** (Swapnil Bhartiya, 21 Sep 2016): https://www.linux-magazine.com/Online/News/Linus-Torvalds-Confirms-the-Date-of-the-First-Linux-Release\n  - Torvalds is quoted: \"Today is the 25th anniversary of the Linux-0.01 release, I do believe.\"\n  - \"The 0.01 code drop happened a couple of weeks later and wasn't publicly announced.\"\n  - \"The makefile of the first release is stamped September 17, 1991.\"\n  - This is a secondary news article. A sub-agent read it for me and reported these quotes as verbatim. I did not read the page myself.\n\n- **Wikipedia, History of Linux:** https://en.wikipedia.org/wiki/History_of_Linux\n  - Verbatim: \"On 25 August 1991, he (at age 21) announced this system in another posting to the comp.os.minix newsgroup.\"\n  - It also says the files went to the FUNET FTP server \"in September 1991.\"\n  - The \"Version 0.01 is released publicly on 17 September\" line came from a model-generated summary of a truncated page, so it is unverified. The page was last edited 9 Nov 2026.\n\n- **Web search results (mailing-list thread and secondary articles):** The results consistently give 17 September 1991. I only saw search snippets, not the pages themselves.\n  - The thread is \"30 years since the Linux 0.01 release\", from September 2021.\n  - A snippet describes Torvalds calling 17 September the \"true 30th anniversary date of the actual code\". I did not read that wording on the page.\n\n**What I could not verify**\n\n- I could not read Torvalds's own 2021 mailing-list post at https://www.lkml.org/lkml/2021/9/17/1018. The fetch returned an \"Access Denied\" page.\n- I found no kernel.org page that states the release date. The kernel.org Historic directory (https://www.kernel.org/pub/linux/kernel/Historic/) lists `linux-0.01.tar.gz` as \"30-Oct-1993\". That is a server file timestamp, not the release date.\n- The 17 September date therefore rests on Torvalds's reported statements and the makefile timestamp, relayed through secondary sources. The sources do not disagree with each other."
+    },
+    {
+      "id": "q46",
+      "arm": "new",
+      "limited": false,
+      "correct": 1,
+      "cited": 7,
+      "supported": 7,
+      "judges": [
+        {
+          "model": "sonnet",
+          "correct": 1,
+          "cited": 7,
+          "supported": 7,
+          "cost": 0.08747324000000001,
+          "tools": 6
+        }
+      ],
+      "gold": 1,
+      "cost": 0.2094763,
+      "runCost": 0.12200306,
+      "judgeCost": 0.08747324000000001,
+      "tools": [
+        "Read",
+        "ToolSearch",
+        "Agent",
+        "WebFetch",
+        "WebFetch",
+        "WebFetch",
+        "WebSearch",
+        "Agent",
+        "WebFetch"
+      ],
+      "answer": "**Answer:** Linux 0.01 was released on **17 September 1991**. That is about three weeks after the 25 August 1991 Usenet announcement.\n\n**Confidence:** High. Two independent sources agree on the date, and one of them reports Torvalds himself confirming it.\n\nDepth: standard. I did not write to the vault.\n\n## Findings\n\n- **Release date.** Wikipedia's Linux kernel article says: \"On 17 September 1991, Torvalds prepared version 0.01 of Linux and put on the 'ftp.funet.fi' – FTP server of the Finnish University and Research Network (FUNET).\" [1] The History of Linux article agrees: \"Version 0.01 is released publicly on 17 September.\" [2]\n- **Confirmed by Torvalds.** Linux Magazine reports that Torvalds \"has finally discovered the date of its first release: September 17, 1991.\" The basis was the file timestamp: \"The makefile of the first release is stamped September 17, 1991.\" [3] The same article quotes his Google+ post: \"Today is the 25th anniversary of the Linux-0.01 release, I do believe.\" [3]\n- **Usenet announcement.** The History of Linux article says: \"The Linux kernel is publicly announced on 25 August by the 21-year-old Finnish student Linus Benedict Torvalds.\" [2] Linux Magazine adds that the official Linux birthday remains 25 August, the date of the announcement. [3]\n\n## Conflicts and gaps\n\n- The 25 August announcement and the 17 September release are different events. The first is often called Linux's \"birthday\", so some sources give the earlier date.\n- The Wikipedia pages are not independent of each other, so they count as one source. The Linux Magazine article is a separate secondary source.\n- I did not open the original Usenet post or the archived 0.01 files on kernel.org or FUNET.\n- A search result mentioned a claim that Torvalds never announced 0.01 publicly and only emailed interested people. I did not open that source, so I haven't cited it.\n\n## Sources\n\n[1] Linux kernel, Wikipedia. https://en.wikipedia.org/wiki/Linux_kernel\n[2] History of Linux, Wikipedia. https://en.wikipedia.org/wiki/History_of_Linux\n[3] \"Linus Torvalds Confirms the Date of the First Linux Release\", Linux Magazine, 21 Sep 2016. https://www.linux-magazine.com/index.php/Online/News/Linus-Torvalds-Confirms-the-Date-of-the-First-Linux-Release"
+    },
+    {
+      "id": "q47",
+      "arm": "baseline",
+      "limited": false,
+      "correct": 1,
+      "cited": 3,
+      "supported": 2,
+      "judges": [
+        {
+          "model": "sonnet",
+          "correct": 1,
+          "cited": 3,
+          "supported": 2,
+          "cost": 0.059041714999999995,
+          "tools": 3
+        }
+      ],
+      "gold": 1,
+      "cost": 0.15036342999999996,
+      "runCost": 0.09132171499999998,
+      "judgeCost": 0.059041714999999995,
+      "tools": [
+        "ToolSearch",
+        "WebFetch",
+        "Agent",
+        "WebFetch",
+        "WebFetch",
+        "WebSearch"
+      ],
+      "answer": "**Answer:** New Zealand, in 1893. An earlier territory sometimes cited instead is the Pitcairn Islands (1838).\n\n**Claims and sources**\n\n- **New Zealand, 1893.** The Wikipedia page (https://en.wikipedia.org/wiki/Women%27s_suffrage_in_New_Zealand) says: \"New Zealand became the first nation in the world in which all women had the right to vote in parliamentary elections.\" It also says \"the Electoral Act 1893 gave all women in New Zealand aged 21 or older the right to vote,\" with the governor's consent on 19 September 1893. Women first voted in the election held on 28 November 1893. These quotes come from a subagent that read the page. It reports the page says \"nation,\" not \"self-governing country.\"\n\n- **The \"self-governing\" wording.** NZHistory (https://www.nzhistory.govt.nz/node/684, \"First in the world\") is the official source. I did not read the page itself. Its direct fetch returned a 403. I only have this paraphrase from a search result, not a verbatim quote: \"although a number of other territories enfranchised women before 1893, New Zealand can justly claim to be the first self-governing country to grant the vote to all adult women.\"\n\n- **Pitcairn Islands, 1838.** I only saw search-result snippets for this, with no page read. They say Pitcairn became a British colony on 30 November 1838 and that female descendants of the Bounty mutineers could vote for their ruling councils from then. Pitcairn was a dependency without self-government, and those votes were for local councils, not national elections. The search listed the Pitcairn Islands Wikipedia page (https://Www.Wikipedia.org/wiki/Pitcairn) and the Women's suffrage page (https://www.wikipedia.org/wiki/Female_vote), but I did not open either.\n\n**Gaps and caveats**\n- I found no primary source for the 1838 Pitcairn claim, and I did not check the details of that claim.\n- Wikipedia states the New Zealand claim as \"nation,\" while NZHistory (via search snippet only) uses \"self-governing country.\"\n- The Wikipedia page's last-edited date of 9 September 2026 comes from an unverified summary. I have no verified date for the NZHistory page."
+    },
+    {
+      "id": "q47",
+      "arm": "new",
+      "limited": false,
+      "correct": 1,
+      "cited": 7,
+      "supported": 6,
+      "judges": [
+        {
+          "model": "sonnet",
+          "correct": 1,
+          "cited": 7,
+          "supported": 6,
+          "cost": 0.084235965,
+          "tools": 4
+        }
+      ],
+      "gold": 1,
+      "cost": 0.26283468,
+      "runCost": 0.17859871500000002,
+      "judgeCost": 0.084235965,
+      "tools": [
+        "Read",
+        "ToolSearch",
+        "WebSearch",
+        "WebSearch",
+        "WebFetch",
+        "WebFetch",
+        "Agent",
+        "Agent",
+        "WebFetch",
+        "WebFetch",
+        "Agent",
+        "Agent",
+        "WebFetch",
+        "WebFetch",
+        "WebFetch",
+        "Agent",
+        "WebFetch"
+      ],
+      "answer": "**Answer:** New Zealand, in 1893. A territory sometimes cited instead is the Pitcairn Islands, where women could vote from 1838. The Isle of Man (1881) and Wyoming Territory (1869) are also sometimes cited.\n\n**Confidence:** Medium-high. The 1893 New Zealand claim is verified on one page I could read. The earlier-territory claims are not verified verbatim.\n\n## Findings\n\n- **New Zealand, 1893 (verified).** The Wikipedia page \"Women's suffrage in New Zealand\" says: \"New Zealand became the first nation in the world in which all women had the right to vote in parliamentary elections.\" [1]\n- **Dates (verified).** The same page says: \"The electoral bill granting women the franchise was given royal assent by Governor Lord Glasgow on 19 September 1893.\" [1] It also says: \"Women voted for the first time in the election held on 28 November 1893.\" [1]\n- **Pitcairn Islands, 1838 (partly verified).** Wikipedia's \"Women's suffrage\" article lists \"1838\" for Pitcairn in its country table. [2] I only saw that year verbatim. A fetch summary attributed a fuller sentence to the page: \"The female descendants of the Bounty mutineers who lived on Pitcairn Islands could vote from 1838.\" I did not confirm that sentence verbatim. [2]\n- **Why Pitcairn is usually set aside (not verified).** A search result summary said Pitcairn's right was a local council franchise rather than a national one, and that its status as \"first\" depends on how you define it. I could not confirm that from a page I read.\n- **Isle of Man (1881) and Wyoming Territory (1869).** I could only verify the table entry \"1881\" for the Isle of Man. [2] I could not verify the Wyoming Territory claim.\n- **\"Self-governing\" qualifier.** The \"first self-governing country\" wording did not appear verbatim on the pages I read. A fetch summary quoted \"The first national granting of women's suffrage was in 1893 in the then self-governing British colony of New Zealand\", but I could not confirm that sentence verbatim. [2]\n\n## Conflicts and gaps\n\n- The NZHistory and Te Ara pages returned HTTP 403, so I could not read or verify them. They only appeared in search results. They are the likeliest source of the \"self-governing\" wording and the explanation of the earlier cases.\n- Only about 42% of the NZ Wikipedia page, and part of the general suffrage article, was read verbatim.\n- I did not check the vault, as instructed, and the `hub_recall` tool wasn't available. I ran this at standard level.\n\n## Sources\n\n[1] Women's suffrage in New Zealand, Wikipedia. https://en.wikipedia.org/wiki/Women%27s_suffrage_in_New_Zealand\n[2] Women's suffrage, Wikipedia. https://en.wikipedia.org/wiki/Women%27s_suffrage"
+    }
+  ]
+}

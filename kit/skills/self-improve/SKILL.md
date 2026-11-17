@@ -37,6 +37,10 @@ What it does:
 
 Stops: any output with "hit your" (usage limit) ends the run; `--budget` (default $3, summed `total_cost_usd`) ends it; `touch ~/.claude/self-improve.off` is the kill switch, checked before every call.
 
+## Undo point
+
+Before anything writes to a kit, rules or agent file (a merge, or Learn applying a run), save the target: `node ~/.claude/skills/aar/scripts/snapshot.mjs save "self-improve <target>" <target>`. Learn does this itself in Switchboard; `restore <id>` puts it back.
+
 ## After the verdict
 
 - Reject: report the reason and the run dir. Nothing else.

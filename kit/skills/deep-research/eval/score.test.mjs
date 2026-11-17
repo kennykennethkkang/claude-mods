@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { parseJudge, goldMatch, summarize } from './score.mjs'
+import { parseJudge, goldMatch, summarize, mergeJudges, perJudge } from './score.mjs'
 
 test('parseJudge takes the last JSON object, even inside a fence', () => {
   const text = 'thinking {"x":1}\n```json\n{"correct":1,"claims":[{"supported":1},{"supported":0}]}\n```'
@@ -30,4 +30,18 @@ test('summarize averages per arm and drops runs that hit a limit', () => {
   const s = summarize(rows)
   assert.deepEqual(s.baseline, { n: 2, correct: 0.5, gold: 0.5, citation: 0.5, cost: 0.3 })
   assert.deepEqual(s.new, { n: 1, correct: 1, gold: 1, citation: 1, cost: 0.5 })
+})
+
+test('mergeJudges averages correct and pools citation counts', () => {
+  const m = mergeJudges([{ correct: 1, cited: 3, supported: 2 }, { correct: 0, cited: 2, supported: 2 }])
+  assert.deepEqual(m, { correct: 0.5, cited: 5, supported: 4 })
+  assert.deepEqual(mergeJudges([]), { correct: 0, cited: 0, supported: 0 })
+})
+
+test('perJudge splits each row into arm/model rows for summarize', () => {
+  const rows = [{ id: 'q1', arm: 'new', cost: 1, judges: [{ model: 'haiku', correct: 1, cited: 2, supported: 1, cost: 0.1 }, { model: 'sonnet', correct: 0, cited: 1, supported: 1, cost: 0.2 }] }]
+  const s = summarize(perJudge(rows))
+  assert.deepEqual(Object.keys(s).sort(), ['new/haiku', 'new/sonnet'])
+  assert.equal(s['new/haiku'].citation, 0.5)
+  assert.equal(s['new/sonnet'].correct, 0)
 })

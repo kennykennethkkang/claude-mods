@@ -15,7 +15,7 @@ A panel of synthetic users votes between 2 to 4 options. Default 1000 personas t
 
 ## Inputs
 
-- Goal: what the user is trying to do ("sign up for a free account").
+- Goal: what the user is trying to do ("sign up for a free account"). Set it to the job the new view is for. A glance-at-status goal always crowns a list or dashboard over a visual view; when testing a visual view, run its own goal too and report a glance-only loss as "loses on glance only", not as a loss.
 - 2 to 4 options, each one of:
   - copy or skill output: pass the text, or `@file.txt`
   - HTML: `@page.html` (tags stripped to visible text)
@@ -28,8 +28,10 @@ A panel of synthetic users votes between 2 to 4 options. Default 1000 personas t
 ```
 node <this skill>/scripts/crowd-ab.mjs --goal "sign up" \
   --option @a.html --option @b.html --label "New" --label "Current" \
-  [--n 1000] [--cap 1] [--seed 1] [--out dir] [--panel] [--dry-run]
+  [--n 1000] [--cap 1] [--seed 1] [--out dir] [--panel] [--dry-run] [--device phone=55,desktop=35,tablet=10]
 ```
+
+The default device mix is 55% phone. For a desktop-first product pass `--device desktop=80,phone=10,tablet=10`.
 
 What it does, so you do not redo it by hand:
 - Builds N personas varied by age, tech skill, device, accessibility needs, intent and patience (seeded, repeatable).

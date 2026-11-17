@@ -7,14 +7,14 @@ import { bandLine, statusLine } from '../hooks/register.tsx'
 const MIN = 60_000
 
 // Switchboard window, session and fork answers beneath the plugin; reads = cache_read per fork, in order.
-function rig($: Engine, on: On, reads: number[] = [], forkRaisesTurn = false) {
+function rig($: Engine, on: On, reads: number[] = [], forkRaisesTurn = false, limits?: () => object) {
   const clock = mock.clock(on, { now: 1_000 * MIN })
   const posts: Record<string, unknown>[] = []
   const status: (string | undefined)[] = []
   let forks = 0
   mock.env(on, { HOME: '/u' })
   on('fs.list', () => ({ value: [{ name: 'w1.json', kind: 'file', size: 1, mtimeMs: 0, isLink: false }] }))
-  on('fs.read', () => ({ value: JSON.stringify({ port: 4100, hubToken: 'tok', workspace: '/u/p' }) }))
+  on('fs.read', (_, e) => ({ value: JSON.stringify(limits && String(e.path).endsWith('limits.json') ? limits() : { port: 4100, hubToken: 'tok', workspace: '/u/p' }) }))
   on('http.fetch', (_, e) => {
     posts.push(JSON.parse(String(e.init?.body ?? '{}')))
     return { value: { status: 204, ok: true, headers: {}, text: '' } }
@@ -188,4 +188,20 @@ test('a chat that exits tells Switchboard it is off', async ($, on) => {
   await r.turn()
   await $.session.end({ reason: 'prompt_input_exit', sessionId: 'chat-1', resume: {} as never })
   expect(r.cache().at(-1)).toMatchObject({ state: 'off', sessionId: 'chat-1' })
+})
+
+test('no ping while Switchboard holds the chat at its usage limit; the keep goes off', async ($, on) => {
+  let limits: object = { windows: [] }
+  const r = rig($, on, [], false, () => limits)
+  await r.start()
+  await r.turn()
+  limits = { windows: [], paused: true, pause: { kind: 'five_hour', percent: 99, resumeAt: r.clock.now() + 120 * MIN, chats: [] } }
+  await r.clock.advance(55 * MIN)
+  expect(r.forks()).toBe(0)
+  expect(r.cache().at(-1)).toMatchObject({ state: 'off' })
+  // A pause past its resumeAt holds nothing.
+  limits = { windows: [], paused: true, pause: { kind: 'five_hour', percent: 99, resumeAt: r.clock.now() - 1, chats: [] } }
+  await r.turn()
+  await r.clock.advance(55 * MIN)
+  expect(r.forks()).toBe(1)
 })

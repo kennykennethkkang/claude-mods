@@ -1,0 +1,43 @@
+$ git log --decorate --format='%h%d %s%n%b' v2.3.1..HEAD
+
+9c41e07 (HEAD -> main) fix(sync): retry on HTTP 429 with backoff
+Retries up to 3 times, waiting 1s, 2s, 4s. Previously sync failed on the first 429.
+
+b7a2d10 test(search): fixtures for accent folding
+
+e55f019 perf(index): build the search index lazily
+First `notes search` after install is about 40% faster on a 10k note library.
+Later searches are unchanged.
+
+3d0c8aa Revert "feat(export): add CSV export"
+This reverts commit 71fe2b4. Quoting bugs on multiline notes; back in 2.5.
+
+a80e6b3 fix(admin-dash): axis labels on the release metrics chart
+Internal dashboard only, not shipped in the CLI package.
+
+71fe2b4 feat(export): add CSV export
+
+2f19c55 refactor(config): read sync interval in seconds
+BREAKING CHANGE: the `sync.interval` key (minutes) is no longer read.
+Set `sync.intervalSeconds` instead. Example: `sync.interval = 5` becomes
+`sync.intervalSeconds = 300`.
+
+c6e3b92 feat(ci): dark theme for the coverage report
+
+0d4f7a1 fix(cli): `notes ls` no longer crashes on an empty notebook
+
+f8b3e60 chore(deps): bump vitest to 2.1.4
+
+a1c9d38 fix(search): accented letters match their plain form
+"cafe" now finds "café" and the other way round.
+
+5b72e44 feat(sync): add --dry-run to `notes sync`
+Prints what would be uploaded and deleted without changing anything.
+
+e02d9f1 docs: fix typo in CONTRIBUTING
+
+4e8812c (tag: v2.3.2) chore(release): 2.3.2
+
+77ad0b5 fix(edit): fall back to $EDITOR when $VISUAL is empty
+
+1b0c6f3 fix(sync): refresh expired token instead of failing

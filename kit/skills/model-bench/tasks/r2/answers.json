@@ -1,0 +1,10 @@
+[
+  ["\\brelease\\b", "inventory\\.ts", "priorit"],
+  ["orders\\.ts", "\\bcancel", "\\bexpireStale\\b", "\\bpay\\b"],
+  ["\\bclaim\\b", "\\bapplyPromo\\b"],
+  ["receipts\\.ts", "roundHalfUp", "\\ballocate\\b"],
+  ["409", "\\bexpired\\b"],
+  ["\\bunitPrice\\b", "\\breprice\\b", "2200"],
+  ["/admin/audit", "\\bAudit\\b", "\\brun\\b", "\\bplaced\\b", "\\bpaid\\b"],
+  ["cancelled[\\s\\S]*refunded", "\\bofType\\b"]
+]

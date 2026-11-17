@@ -4,15 +4,23 @@ import type { EngineInterface, Register } from 'claude-code'
 
 type Target = { port: number; token: string; workspace: string }
 type Discovery = { port?: unknown; hubToken?: unknown; workspace?: unknown }
-type ChatRow = { sessionId: string; name?: string; cwd: string; project?: string; live: boolean; ai?: string }
+type ChatRow = { sessionId: string; name?: string; cwd: string; project?: string; live: boolean; ai?: string; chain?: string }
 type Task = { subject?: string; status: string }
 type Progress = {
   sessionId: string; cwd?: string; state: 'working' | 'done' | 'needs-you' | 'idle'; tasks: Task[]
   question?: string; report?: { done: string[]; left: string[]; you?: string[] }; tests?: { ok: boolean; command?: string; failed?: number }
+  limited?: unknown
+  running?: string[]; waiting?: boolean; jobs?: unknown[]
 }
 type Live = { sessionId: string; file?: string; fileAt?: number }
-type Link = { from: string; to: string[] }
-export type HubState = { chats: ChatRow[]; progress: Progress[]; live: Live[]; links?: Link[] }
+type Link = { from: string; to: string[]; auto?: boolean }
+type Unlink = { from: string; to: string }
+export type HubState = {
+  chats: ChatRow[]; progress: Progress[]; live: Live[]; links?: Link[]
+  // Kenneth's unlinks, kept five minutes by the hub; a link merely gone is a reload or an ended target.
+  archive?: { sessionId: string; approvedAt?: number }[]
+  unlinks?: Unlink[]; pause?: { chats?: { sessionId: string }[] }; waits?: { sessionId: string }[]
+}
 
 const CHECK = 'chats_check'
 const WAIT = 'chats_wait'
@@ -20,21 +28,26 @@ const EDITS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit'])
 const REDISCOVER_MS = 30_000
 const STATE_MS = 10_000
 const POLL_S = 5
-// The hub's editGuard window and retry pass (agent-flow extension/src/hub/brain.ts).
+// A live target with no progress is a reload for this long from when its progress went missing; past it, ended with nothing to show.
+const GRACE_MS = 10 * 60_000
+// The hub's editGuard window and retry pass (switchboard extension/src/hub/brain.ts).
 const GUARD_MS = 10 * 60_000
 const RETRY_MS = 2 * 60_000
 // ponytail: one step per tool call, the engine's tool timeout is unknown; raise it if calls survive longer.
 const STEP_MS = 4 * 60_000
-// A wait Kenneth removed is not posted again for this long.
-const REMOVED_MS = 5 * 60_000
+// A missing-progress mark not polled this long is from a wait the chat dropped.
+const MARK_STALE_MS = 15 * 60_000
+// Each block runs one chats_wait step (about 4 min), so 45 holds a wait about three hours; past that the chat stops.
+export const MAX_BLOCKS = 45
+const APPROVE = 'Approve this chat as finished'
 const REMOVED = 'Kenneth removed this wait in Switchboard; continue on your own.'
 
 export const norm = (p: string) => p.replace(/\\/g, '/').replace(/\/+$/, '')
 const inside = (p: string, dir: string) => p === dir || p.startsWith(`${dir}/`)
 
-const cache = { targets: [] as Target[], foundAt: -Infinity, state: undefined as HubState | undefined, stateAt: -Infinity, tried: new Map<string, number>(), mine: new Map<string, number>(), seen: new Set<string>() }
+const cache = { targets: [] as Target[], foundAt: -Infinity, state: undefined as HubState | undefined, stateAt: -Infinity, tried: new Map<string, number>(), blocks: 0, mine: new Map<string, number>(), missing: new Map<string, { at: number; seen: number }>() }
 export function resetCache() {
-  Object.assign(cache, { targets: [], foundAt: -Infinity, state: undefined, stateAt: -Infinity, tried: new Map(), mine: new Map(), seen: new Set() })
+  Object.assign(cache, { targets: [], foundAt: -Infinity, state: undefined, stateAt: -Infinity, tried: new Map(), blocks: 0, mine: new Map(), missing: new Map() })
 }
 
 /** This project's other live chats: same repo name when both rows have one, else one folder holds the other. */
@@ -70,9 +83,13 @@ export function waitsOn(links: Link[] = [], from: string, to: string): boolean {
   return false
 }
 
-/** Finished: done, needs-you, idle after work, or gone. Clean: done or idle with no failing tests. */
+/** Finished: done, needs-you, idle after work, or gone. Clean: done, idle or at the Approve question, with no failing tests. A usage limit, running subagents or shells, are not finished. */
 export function outcomeOf(p: Progress | undefined) {
   if (!p) return { finished: true, clean: false }
+  if (p.limited) return { finished: false, clean: false }
+  if (p.state === 'needs-you' && p.question?.includes(APPROVE) && !p.running?.length) return { finished: true, clean: p.tests?.ok !== false }
+  // Subagents and the lead's shells hold it; subJobs go stale once their subagent stops, so they do not.
+  if ((p.running?.length || p.waiting || p.jobs?.length) && p.state !== 'done') return { finished: false, clean: false }
   const worked = p.tasks.length > 0 || !!p.report
   const finished = p.state === 'done' || p.state === 'needs-you' || (p.state === 'idle' && worked)
   return { finished, clean: finished && p.state !== 'needs-you' && p.tests?.ok !== false }
@@ -88,6 +105,22 @@ export function editClash(s: HubState, self: string, cwd: string, file: string, 
     if (peer && s.progress.find(p => p.sessionId === l.sessionId)?.state !== 'done') return peer
   }
   return undefined
+}
+
+/** outcomeOf in the hub's view: paused, mid-handoff, or live with no progress yet (a reload, GRACE_MS at most) is still working. */
+function outcomeIn(s: HubState, id: string, now: number) {
+  const p = s.progress.find(x => x.sessionId === id)
+  if (s.pause?.chats?.some(c => c.sessionId === id) || s.waits?.some(w => w.sessionId === id)) return { finished: false, clean: false }
+  if (!p && s.archive?.some(a => a.sessionId === id && a.approvedAt)) return { finished: true, clean: true }
+  if (!p && s.chats.find(c => c.sessionId === id)?.live && now - (cache.missing.get(id)?.at ?? now) < GRACE_MS) return { finished: false, clean: false }
+  return outcomeOf(p)
+}
+
+/** A closed target's next chat in its handoff chain, else itself. */
+export function follow(s: HubState, id: string) {
+  const c = s.chats.find(x => x.sessionId === id)
+  if (c?.live || !c?.chain) return id
+  return s.chats.find(x => x.live && x.chain === c.chain && x.sessionId !== id)?.sessionId ?? id
 }
 
 const label = (c: ChatRow) => `${c.name ?? 'unnamed'} (${c.sessionId.slice(0, 8)}${c.ai ? `, ${c.ai}` : ''})`
@@ -106,7 +139,7 @@ function finishText(s: HubState, ids: string[]) {
   const lines = ids.map(id => {
     const c = s.chats.find(x => x.sessionId === id) ?? { sessionId: id, cwd: '', live: false }
     const p = s.progress.find(x => x.sessionId === id)
-    clean &&= outcomeOf(p).clean
+    clean &&= outcomeIn(s, id, Infinity).clean
     const tests = p?.tests ? `, tests ${p.tests.ok ? 'passed' : `failing (${p.tests.command ?? 'last run'})`}` : ''
     const r = p?.report
     const report = r ? `\n  Done: ${r.done.join('; ') || 'none'}\n  Left: ${r.left.join('; ') || 'none'}${r.you?.length ? `\n  For Kenneth: ${r.you.join('; ')}` : ''}` : '\n  No report.'
@@ -114,7 +147,7 @@ function finishText(s: HubState, ids: string[]) {
   })
   const next = clean
     ? 'Continue on your own: read the report above and pick up your work.'
-    : 'Stop and ask Kenneth before going on: a chat you waited for needs him, ended without a report, or has failing tests.'
+    : 'Stop and ask Kenneth with AskUserQuestion before going on: a chat you waited for needs him, ended without a report, or has failing tests.'
   return `Finished:\n${lines.join('\n')}\n\n${next}`
 }
 
@@ -185,42 +218,63 @@ export async function waitStep($: EngineInterface, input: { chats?: unknown; rea
   const matched = matchTargets(peers, wanted), missing = matched.missing
   let ids = matched.ids
   if (missing.length) return `No live chat in this project matches ${missing.join(', ')}. Live ones:\n${peers.map(c => peerLine(s!, c)).join('\n') || '(none)'}`
+  const loopText = (id: string) => `${label(s!.chats.find(p => p.sessionId === id) ?? { sessionId: id, cwd: '', live: true })} already waits on this chat, so both would wait forever. Do not wait on it: continue on your own or ask Kenneth.`
   const loop = ids.find(id => waitsOn(s!.links, id, self))
-  if (loop) return `${label(peers.find(p => p.sessionId === loop)!)} already waits on this chat, so both would wait forever. Do not wait on it: continue on your own or ask Kenneth.`
+  if (loop) return loopText(loop)
   const start = await $.clock.now()
-  const removed = ((await Promise.resolve().then(() => $.store.get('removed')).catch(() => undefined)) ?? {}) as Record<string, number>
-  for (const k of Object.keys(removed)) if (start - removed[k] >= REMOVED_MS) delete removed[k]
-  // A link seen up and gone now, with the wait still on: Kenneth unlinked it in Switchboard.
-  const dropGone = async (now: number) => {
-    if (!s?.links) return
-    const up = new Set(s.links.filter(l => l.from === self).flatMap(l => l.to))
-    for (const id of ids) {
-      if (up.has(id)) cache.seen.add(id)
-      else if (cache.seen.has(id)) { cache.seen.delete(id); removed[`${self}\n${id}`] = now }
+  // Only Kenneth's unlink ends a wait; it stays on the hub five minutes, so a second call does not post it again.
+  let linked = ids
+  const drop = async () => {
+    const gone = new Set(s?.unlinks?.filter(u => u.from === self).map(u => u.to))
+    const next = [...new Set(ids.filter(id => !gone.has(id)).map(id => follow(s!, id)))]
+    for (const id of ids) if (!next.includes(id)) cache.missing.delete(id)
+    if (next.length && !sameIds(next, linked)) {
+      await post($, { kind: 'link-end', from: self, to: linked })
+      await post($, { kind: 'link', from: self, to: next, reason: String(input.reason ?? ''), auto: false, since: start })
+      linked = next
     }
-    ids = ids.filter(id => !removed[`${self}\n${id}`])
-    await Promise.resolve().then(() => $.store.set('removed', removed)).catch(() => undefined)
+    ids = next
+    // A handoff can move the wait onto a chat that waits on this one.
+    const loop = ids.find(id => waitsOn(s!.links, id, self))
+    if (loop) { await post($, { kind: 'link-end', from: self, to: linked }); forget(ids); return loopText(loop) }
   }
-  await dropGone(start)
+  const looped = await drop()
+  if (looped) return looped
   if (!ids.length) return REMOVED
+  linked = ids
   await post($, { kind: 'link', from: self, to: ids, reason: String(input.reason ?? ''), auto: false, since: start })
   for (;;) {
-    if (s && ids.every(id => outcomeOf(s!.progress.find(p => p.sessionId === id)).finished)) {
-      await post($, { kind: 'link-end', from: self, to: ids })
-      for (const id of ids) cache.seen.delete(id)
+    const now = await $.clock.now()
+    if (s) mark(s, ids, now)
+    if (s && ids.every(id => outcomeIn(s!, id, now).finished)) {
+      await post($, { kind: 'link-end', from: self, to: linked })
+      forget(ids)
       return finishText(s, ids)
     }
-    const now = await $.clock.now()
     if (now - start >= STEP_MS) {
       const lines = s ? ids.flatMap(id => { const c = s!.chats.find(x => x.sessionId === id); return c ? [peerLine(s!, c)] : [] }).join('\n') : ''
       return `Still waiting${lines ? `:\n${lines}` : '.'}\nCall chats_wait again with the same chats to keep waiting.`
     }
     await pause($, POLL_S)
     s = (await readState($)) ?? s
-    await dropGone(now)
+    const again = await drop()
+    if (again) return again
     if (!ids.length) return REMOVED
   }
 }
+
+const forget = (ids: string[]) => { for (const id of ids) cache.missing.delete(id) }
+/** Starts each target's grace when its progress first goes missing; progress present clears it. */
+function mark(s: HubState, ids: string[], now: number) {
+  for (const id of ids) {
+    const m = cache.missing.get(id)
+    if (s.progress.some(p => p.sessionId === id)) cache.missing.delete(id)
+    else if (!m || now - m.seen >= MARK_STALE_MS) cache.missing.set(id, { at: now, seen: now })
+    else m.seen = now
+  }
+}
+
+const sameIds = (a: string[], b: string[]) => a.length === b.length && a.every(x => b.includes(x))
 
 /** Why this edit should wait, once per file per two minutes; posts the auto link. */
 export async function editDenial($: EngineInterface, file: string) {
@@ -258,6 +312,12 @@ export const register: Register = on => {
     return started
   })
 
+  // turn.complete cannot block; classic.Stop can, as done-check does. The lead only: subagents stop through SubagentStop.
+  on('classic.Stop', async ($, e, next) => {
+    const why = await stopReason($, e.stop_hook_active).catch(() => undefined)
+    return why ? { block: why } : next(e)
+  }).catch(($, e, next) => next(e))
+
   on('tool.call', { tool: `mcp__chat-wait__${CHECK}` }, async $ => ({ result: await checkText($) }))
   on('tool.call', { tool: `mcp__chat-wait__${WAIT}` }, async ($, e) => ({ result: await waitStep($, e as { chats?: unknown; reason?: unknown }) }))
 
@@ -273,4 +333,27 @@ export const register: Register = on => {
     if (ran.deny === undefined && !ran.isError) cache.mine.set(file, await $.clock.now())
     return ran
   })
+}
+
+/** Why this chat's stop should hold: a wait of its own (not an auto link) that it has not read the end of. */
+export async function stopReason($: EngineInterface, active: boolean) {
+  if (!active) cache.blocks = 0
+  if (cache.blocks >= MAX_BLOCKS) return undefined
+  const s = await readState($)
+  if (!s) return undefined
+  const self = await $.session.id()
+  if (s.pause?.chats?.some(c => c.sessionId === self) || s.progress.find(p => p.sessionId === self)?.limited) return undefined
+  const links = (s.links ?? []).filter(l => l.from === self && !l.auto)
+  if (!links.length) return undefined
+  const now = await $.clock.now()
+  const idsOf = (l: Link) => [...new Set(l.to.map(id => follow(s, id)))]
+  const open = [...new Set(links.flatMap(idsOf).filter(id => !outcomeIn(s, id, now).finished))]
+  cache.blocks++
+  if (open.length) {
+    const names = open.map(id => label(s.chats.find(c => c.sessionId === id) ?? { sessionId: id, cwd: '', live: true }))
+    return `You are waiting on ${names.join(', ')} (still working). Call chats_wait with chats ${JSON.stringify(open)} to keep waiting, or ask Kenneth to remove the wait.`
+  }
+  // All done: end each link by its stored ids (the hub matches them exactly) and hand over the reports; chats_wait refuses ended chats.
+  for (const l of links) await post($, { kind: 'link-end', from: self, to: l.to })
+  return finishText(s, [...new Set(links.flatMap(idsOf))])
 }

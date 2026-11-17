@@ -1,0 +1,705 @@
+{
+  "date": "2026-11-10T18:50:17.493Z",
+  "level": "standard",
+  "models": {
+    "arms": "sonnet",
+    "judges": [
+      "sonnet"
+    ]
+  },
+  "claims": "all",
+  "summary": {
+    "baseline": {
+      "n": 10,
+      "correct": 1,
+      "gold": 1,
+      "citation": 0.936,
+      "cost": 1.539
+    },
+    "new": {
+      "n": 10,
+      "correct": 1,
+      "gold": 1,
+      "citation": 0.962,
+      "cost": 2.1
+    }
+  },
+  "byJudge": {
+    "baseline/sonnet": {
+      "n": 10,
+      "correct": 1,
+      "gold": 1,
+      "citation": 0.936,
+      "cost": 0.72
+    },
+    "new/sonnet": {
+      "n": 10,
+      "correct": 1,
+      "gold": 1,
+      "citation": 0.962,
+      "cost": 0.793
+    }
+  },
+  "rows": [
+    {
+      "id": "q16",
+      "arm": "baseline",
+      "limited": false,
+      "correct": 1,
+      "cited": 4,
+      "supported": 4,
+      "judges": [
+        {
+          "model": "sonnet",
+          "correct": 1,
+          "cited": 4,
+          "supported": 4,
+          "cost": 0.09204443500000001,
+          "tools": 6
+        }
+      ],
+      "gold": 1,
+      "cost": 0.18444985000000003,
+      "runCost": 0.092405415,
+      "judgeCost": 0.09204443500000001,
+      "tools": [
+        "Bash",
+        "Bash",
+        "Agent",
+        "WebFetch",
+        "WebFetch",
+        "WebFetch"
+      ],
+      "answer": "**She was born in San Carlos, California.**\n\nThe chain, with sources:\n\n1. **Burj Khalifa opened on 4 January 2010.** The Burj Khalifa page (https://en.wikipedia.org/wiki/Burj_Khalifa) says: \"The building officially opened on 4 January 2010\". It also gives 23 January 2011 as the \"complete inauguration\" date. That is when the last major facility became operational, not the official opening.\n2. **The first Oscars ceremony after that was the 82nd, on 7 March 2010.** The 82nd Academy Awards page (https://en.wikipedia.org/wiki/82nd_Academy_Awards) says it \"took place on March 7, 2010, at the Kodak Theatre\". It also says: \"The Hurt Locker won six awards, including Best Picture.\" Best Director went to \"Kathryn Bigelow – The Hurt Locker.\"\n3. **Bigelow was the first woman to win Best Director.** Her page (https://en.wikipedia.org/wiki/Kathryn_Bigelow) says: \"Bigelow became the first woman to win the Academy Award for Best Director.\"\n4. **Her birthplace is San Carlos, California.** The same page says she \"was born on November 27, 1951, in San Carlos, California.\"\n\n**Caveats:**\n- I couldn't run shell commands to read the pages myself. All quotes come from a subagent that fetched the pages, and I haven't checked them against the pages directly.\n- The fetched pages were truncated. The quotes come from the portions that were read verbatim.\n- Every source is Wikipedia. I didn't find a primary source such as oscars.org or the building developer's site, so these are secondary sources.\n- The Bigelow page has a \"citation needed\" tag on her name in the birth sentence, not on the birthplace."
+    },
+    {
+      "id": "q16",
+      "arm": "new",
+      "limited": false,
+      "correct": 1,
+      "cited": 5,
+      "supported": 5,
+      "judges": [
+        {
+          "model": "sonnet",
+          "correct": 1,
+          "cited": 5,
+          "supported": 5,
+          "cost": 0.08834568000000001,
+          "tools": 6
+        }
+      ],
+      "gold": 1,
+      "cost": 0.271488305,
+      "runCost": 0.183142625,
+      "judgeCost": 0.08834568000000001,
+      "tools": [
+        "Read",
+        "ToolSearch",
+        "WebSearch",
+        "WebSearch",
+        "WebSearch",
+        "Agent",
+        "WebFetch",
+        "Agent",
+        "Agent",
+        "WebFetch",
+        "WebFetch",
+        "Agent",
+        "Agent",
+        "WebFetch",
+        "WebFetch"
+      ],
+      "answer": "**Answer:** Kathryn Bigelow was born in San Carlos, California.\n\n**Confidence:** High for the chain. Each claim was re-read on its page. Wikipedia is the only source I could open for each claim, so none is cross-checked against a second source.\n\n## Findings\n\n1. The Burj Khalifa officially opened on 4 January 2010. [1] Its page also gives a separate \"Inaugurated\" date of 23 January 2011, which is a different event.\n2. The first Oscars ceremony after that was the 82nd Academy Awards, held on March 7, 2010. [2]\n3. *The Hurt Locker* won Best Picture at that ceremony. [2]\n4. Bigelow won Best Director, and the page calls her the first woman to do so. [2]\n5. Bigelow was born in San Carlos, California. [3]\n\n## Conflicts and gaps\n- Britannica returned HTTP 403 on both pages I tried, so I did not cite it. The search summary reported the same birthplace, but I didn't open that page myself.\n- The 82nd Awards page was only partly readable verbatim (about 40,000 of 158,000 characters). All three quotes I used came from that readable portion.\n\n## Sources\n[1] Burj Khalifa, Wikipedia. https://en.wikipedia.org/wiki/Burj_Khalifa — \"The building officially opened on 4 January 2010\"\n[2] 82nd Academy Awards, Wikipedia. https://en.wikipedia.org/wiki/82nd_Academy_Awards — \"The Hurt Locker won six awards, including Best Picture.\" and \"Kathryn Bigelow made history as the first female to win the Academy Award for Best Director.\"\n[3] Kathryn Bigelow, Wikipedia. https://en.wikipedia.org/wiki/Kathryn_Bigelow — \"was born on November 27, 1951, in San Carlos, California\"\n\nI did not write to the vault, as you asked."
+    },
+    {
+      "id": "q17",
+      "arm": "baseline",
+      "limited": false,
+      "correct": 1,
+      "cited": 4,
+      "supported": 4,
+      "judges": [
+        {
+          "model": "sonnet",
+          "correct": 1,
+          "cited": 4,
+          "supported": 4,
+          "cost": 0.06170137999999999,
+          "tools": 4
+        }
+      ],
+      "gold": 1,
+      "cost": 0.15256602,
+      "runCost": 0.09086464,
+      "judgeCost": 0.06170137999999999,
+      "tools": [
+        "ToolSearch",
+        "WebSearch",
+        "WebFetch",
+        "WebFetch",
+        "Agent",
+        "WebFetch",
+        "WebFetch"
+      ],
+      "answer": "**Answer: 0.86 m (86 cm).** The 2020 joint figure is 8,848.86 m and the 1955 figure is 8,848 m, so 8,848.86 − 8,848 = 0.86 m.\n\nEvidence (the quotes come from a subagent's fetch of the pages, not from pages I read myself):\n\n- **2020 joint figure and difference.** Nepali Times, 8 Dec 2020, https://nepalitimes.com/mt-everest-grows-by-86cm: \"The height of Mt Everest has grown by 86cm to now measure 8848.86m, the foreign ministers of Nepal and China revealed at a joint virtual live event on Tuesday.\"\n- **1955 figure.** The same Nepali Times page: \"Mt Everest's elevation of 8,848m (29,028ft) had been accepted since 1955.\"\n- **Survey of India link.** Al Jazeera, 8 Dec 2020, https://www.aljazeera.com/news/2020/12/8/mt-everest-nepal-china-announce-revised-height-at-8848-metres: \"Nepal earlier recognised 8,848 metres as Mount Everest's official snow height which was the finding of a survey conducted by the Survey of India in the early 1950s.\" The same page gives the new height: \"The new official height is 8,848.86 metres (29,032 feet),\" China's Xinhua said.\n\nCaveats:\n- No single page I read ties the 1955 date, the Survey of India and the 86 cm difference together. Nepali Times says \"accepted since 1955\" and Al Jazeera says \"early 1950s\" survey. I combined the two. A web search snippet also mentioned the surveyor Gulatee and 1954. I didn't open that page, so I'm not relying on it.\n- Al Jazeera's headline rounds the new height to 8,849 m, but its body text gives 8,848.86 m.\n- Al Jazeera says the new figure is \"about four metres higher than China's\" previous figure. That isn't the comparison you asked about."
+    },
+    {
+      "id": "q17",
+      "arm": "new",
+      "limited": false,
+      "correct": 1,
+      "cited": 5,
+      "supported": 5,
+      "judges": [
+        {
+          "model": "sonnet",
+          "correct": 1,
+          "cited": 5,
+          "supported": 5,
+          "cost": 0.05809101,
+          "tools": 3
+        }
+      ],
+      "gold": 1,
+      "cost": 0.15992209000000002,
+      "runCost": 0.10183108000000002,
+      "judgeCost": 0.05809101,
+      "tools": [
+        "Read",
+        "ToolSearch",
+        "WebSearch",
+        "web-fetch",
+        "web-fetch",
+        "Agent",
+        "WebFetch",
+        "WebFetch"
+      ],
+      "answer": "**Answer:** The 2020 figure is 8,848.86 m, which is 0.86 m (86 cm) higher than the 8,848 m figure from the Survey of India's 1950s survey.\n\n**Confidence:** High for the numbers and the difference. Medium for tying the 1955 date to the Survey of India. No single page I checked says both \"Survey of India\" and \"1955\".\n\n**Findings**\n- China and Nepal announced a new height of 8,848.86 m. Nepali Times: \"The height of Mt Everest has grown by 86cm to now measure 8848.86m, the foreign ministers of Nepal and China revealed.\" [1] Al Jazeera, quoting Xinhua: \"The new official height is 8,848.86 metres (29,032 feet).\" [2]\n- The older figure is 8,848 m, accepted since 1955. Nepali Times: \"Mt Everest's elevation of 8,848m (29,028ft) had been accepted since 1955.\" [1] That page does not name the Survey of India. Al Jazeera attributes the figure to that survey: \"the finding of a survey conducted by the Survey of India in the early 1950s.\" [2]\n- The stated difference is 86 cm. Nepali Times: \"The height of Mt Everest has grown by 86cm.\" [1] This matches the arithmetic: 8,848.86 − 8,848 = 0.86 m.\n\n**Conflicts and gaps**\n- Al Jazeera says \"early 1950s\", not 1955. A search result summary suggested 1954 for the survey, but I did not verify that on any page.\n- The 86 cm figure appears only on the Nepali Times page. It is consistent with the two heights both pages give.\n- I did not open a primary source such as the Xinhua or Nepal government statement.\n\n**Sources**\n[1] Nepali Times, \"Mt Everest grows by 86cm\", December 2020. https://nepalitimes.com/mt-everest-grows-by-86cm\n[2] Al Jazeera, \"Mt Everest: Nepal, China announce revised height at 8,848 metres\", 8 Dec 2020. https://www.aljazeera.com/news/2020/12/8/mt-everest-nepal-china-announce-revised-height-at-8848-metres\n\nI used standard depth and did not write to the vault. A subagent re-read both pages to check the quotes."
+    },
+    {
+      "id": "q18",
+      "arm": "baseline",
+      "limited": false,
+      "correct": 1,
+      "cited": 5,
+      "supported": 5,
+      "judges": [
+        {
+          "model": "sonnet",
+          "correct": 1,
+          "cited": 5,
+          "supported": 5,
+          "cost": 0.090205795,
+          "tools": 6
+        }
+      ],
+      "gold": 1,
+      "cost": 0.185757265,
+      "runCost": 0.09555147000000001,
+      "judgeCost": 0.090205795,
+      "tools": [
+        "Agent",
+        "WebFetch",
+        "WebFetch",
+        "WebFetch",
+        "Agent",
+        "WebFetch",
+        "WebFetch"
+      ],
+      "answer": "**The Nobel Prize is listed for 1944.** It was the Nobel Prize in Chemistry, awarded to Otto Hahn alone.\n\n- **Element 109 is meitnerium, named after Lise Meitner.** https://en.wikipedia.org/wiki/Meitnerium says \"it was named after the Austrian-Swedish nuclear physicist Lise Meitner in 1997.\" The infobox naming field reads \"after Lise Meitner.\"\n- **Her long-time collaborator was Otto Hahn.** https://en.wikipedia.org/wiki/Lise_Meitner says \"Meitner did not share the 1944 Nobel Prize in Chemistry for nuclear fission, which was awarded to her long-time collaborator Otto Hahn.\"\n- **Hahn's page gives the same year.** https://en.wikipedia.org/wiki/Otto_Hahn says the discovery was \"for which Hahn alone was awarded the 1944 Nobel Prize in Chemistry.\" Its awards infobox lists \"Nobel Prize in Chemistry (1944).\"\n\n**Caveats**\n- **Wikipedia only.** I could not reach the primary source. nobelprize.org returned HTTP 403 to automated fetches for both the 1944 summary page and Hahn's facts page. Wikipedia agreeing across three pages is the only evidence I have for the year.\n- **Possible 1945 date.** The fetch agent's summary of the unread part of Hahn's page says the award was announced in November 1945, and the day was given as 15 and as 16 November in two summaries. I did not confirm this, and the agent called its wording muddled. If the prize was announced in 1945, the \"1944\" listing is the prize year and 1945 is when it was announced.\n- **Partly unread.** The agents read only parts of the Hahn and Meitner pages. The quotes above are verbatim from sections they did read."
+    },
+    {
+      "id": "q18",
+      "arm": "new",
+      "limited": false,
+      "correct": 1,
+      "cited": 3,
+      "supported": 3,
+      "judges": [
+        {
+          "model": "sonnet",
+          "correct": 1,
+          "cited": 3,
+          "supported": 3,
+          "cost": 0.09391048500000002,
+          "tools": 6
+        }
+      ],
+      "gold": 1,
+      "cost": 0.238055045,
+      "runCost": 0.14414455999999998,
+      "judgeCost": 0.09391048500000002,
+      "tools": [
+        "Read",
+        "Bash",
+        "Bash",
+        "Bash",
+        "Bash",
+        "Agent",
+        "WebFetch",
+        "WebFetch",
+        "WebFetch",
+        "WebFetch",
+        "WebFetch",
+        "WebFetch"
+      ],
+      "answer": "**Answer:** 1944. Element 109 is meitnerium, named after Lise Meitner. Her long-time collaborator Otto Hahn alone received the Nobel Prize in Chemistry, listed as the 1944 prize. It was announced in November 1945.\n\n**Confidence:** Medium-high. Both claims rest on Wikipedia, which gave the year and the announcement date. The official Nobel page returned a 403 error, so I could not confirm the \"1944\" listing there. (This was a standard-level lookup, and I didn't write to the vault.)\n\n**Sources**\n1. Element 109 is named after Meitner. https://en.wikipedia.org/wiki/Meitnerium\n   - Quote: \"it was named after the Austrian-Swedish nuclear physicist Lise Meitner in 1997.\"\n2. Hahn was her long-time collaborator and received the prize alone. https://en.wikipedia.org/wiki/Lise_Meitner\n   - Quote: \"which was awarded to her long-time collaborator Otto Hahn.\"\n   - Quote: \"decided to award that prize solely to Hahn.\"\n3. The prize is listed as 1944, though announced later. Same page.\n   - Quote: \"announced that Hahn had been awarded the 1944 Nobel Prize in Chemistry.\"\n   - The article gives the announcement date as \"On 15 November 1945.\"\n\n**Gaps:** I did not read https://www.nobelprize.org/prizes/chemistry/1944/summary/ because it returned 403 Forbidden. A footnote on the Meitner page reportedly says the committee deferred the 1944 award a year because of the war, but I did not read that footnote's exact wording, so I haven't cited it."
+    },
+    {
+      "id": "q19",
+      "arm": "baseline",
+      "limited": false,
+      "correct": 1,
+      "cited": 4,
+      "supported": 4,
+      "judges": [
+        {
+          "model": "sonnet",
+          "correct": 1,
+          "cited": 4,
+          "supported": 4,
+          "cost": 0.073706375,
+          "tools": 4
+        }
+      ],
+      "gold": 1,
+      "cost": 0.14428067500000002,
+      "runCost": 0.0705743,
+      "judgeCost": 0.073706375,
+      "tools": [
+        "ToolSearch",
+        "Agent",
+        "WebFetch",
+        "WebFetch"
+      ],
+      "answer": "**Answer: the Caspian Sea.** COP29 (2024) was held in Baku, Azerbaijan, which sits on the Caspian's shore. COP28 in 2023 was the UAE one.\n\n**Sources.** Both are Wikipedia articles, read through a fetch subagent. I did not check an independent primary source, and the dates of the pages weren't captured. Each page was truncated when fetched (about 40k of 85k characters for COP29, 40k of 296k for Baku). The quotes below are the ones the subagent reported as verbatim.\n\n- **COP28 was in the UAE.** https://en.wikipedia.org/wiki/2024_United_Nations_Climate_Change_Conference says \"during the previous COP28 meeting in Dubai\" and \"which had been hosted by the United Arab Emirates\". The infobox also lists \"← Dubai 2023\" as the previous event.\n- **COP29 was the following year, in Baku.** The same page's lead says \"It was held at Baku Olympic Stadium in Baku, Azerbaijan, from 11 to 22 November 2024.\"\n- **Baku is on the Caspian Sea.** https://en.wikipedia.org/wiki/Baku says \"as well as the largest city on the Caspian Sea and in the Caucasus region.\" It also says \"Baku lies on the southern shore of the Absheron Peninsula, along the Bay of Baku.\" The Bay of Baku is an inlet of the Caspian, so the Caspian is the body of water.\n\n**Not found.** I did not read a UNFCCC or other official page, and I did not find a quote that directly describes Baku as a \"capital\". The page does not show that Baku is Azerbaijan's capital, so that part rests on general knowledge."
+    },
+    {
+      "id": "q19",
+      "arm": "new",
+      "limited": false,
+      "correct": 1,
+      "cited": 3,
+      "supported": 3,
+      "judges": [
+        {
+          "model": "sonnet",
+          "correct": 1,
+          "cited": 3,
+          "supported": 3,
+          "cost": 0.08592935499999999,
+          "tools": 6
+        }
+      ],
+      "gold": 1,
+      "cost": 0.226307335,
+      "runCost": 0.14037798,
+      "judgeCost": 0.08592935499999999,
+      "tools": [
+        "Read",
+        "ToolSearch",
+        "WebSearch",
+        "WebSearch",
+        "Agent",
+        "WebFetch",
+        "WebFetch",
+        "WebFetch",
+        "Agent",
+        "WebFetch"
+      ],
+      "answer": "**Answer:** The Caspian Sea. COP29 in 2024 was held in Baku, the capital of Azerbaijan, which lies on the Caspian shore.\n\n**Confidence:** High. The three facts below are simple and consistent across sources. I checked each quote on its page except the Britannica one, which I could not open.\n\n**Depth:** Standard. I did not read or write the vault, as instructed.\n\n## Findings\n\n- **COP28 was in the UAE in 2023.** The COP28 page lists the location as \"Expo City, Dubai, United Arab Emirates\". It says the conference was \"held from 30 November to 13 December at Expo City Dubai\". The year 2023 comes from the page title and infobox. [1]\n- **The next COP, COP29, was in Baku in 2024.** \"It was held at Baku Olympic Stadium in Baku, Azerbaijan, from 11 to 22 November 2024.\" [2]\n- **Baku is a capital on the Caspian Sea.** Baku \"is the capital and largest city of Azerbaijan, as well as the largest city on the Caspian Sea\". [3]\n\n## Conflicts and gaps\n\n- The Wikipedia COP29 infobox reportedly gives a different end date (24 November). The article text says 22 November, which most sources repeat. This does not affect the answer.\n- Britannica (https://www.britannica.com/place/Baku) returned HTTP 403, so I did not cite it. A search summary attributed to it says Baku is on the western shore of the Caspian. I did not verify that wording on the page.\n- All three cited pages are Wikipedia, so they are secondary or tertiary sources. The UNFCCC's own pages would be primary, and I did not fetch them.\n\n## Sources\n\n[1] 2023 United Nations Climate Change Conference (COP28), Wikipedia. https://en.wikipedia.org/wiki/COP28\n[2] 2024 United Nations Climate Change Conference (COP29), Wikipedia. https://en.wikipedia.org/wiki/COP29\n[3] Baku, Wikipedia. https://en.wikipedia.org/wiki/Baku"
+    },
+    {
+      "id": "q20",
+      "arm": "baseline",
+      "limited": false,
+      "correct": 1,
+      "cited": 11,
+      "supported": 11,
+      "judges": [
+        {
+          "model": "sonnet",
+          "correct": 1,
+          "cited": 11,
+          "supported": 11,
+          "cost": 0.077768055,
+          "tools": 4
+        }
+      ],
+      "gold": 1,
+      "cost": 0.157712035,
+      "runCost": 0.07994398,
+      "judgeCost": 0.077768055,
+      "tools": [
+        "ToolSearch",
+        "Agent",
+        "Agent",
+        "WebFetch",
+        "WebFetch"
+      ],
+      "answer": "**Answer:** Amazon bought Twitch in 2014. Emmett Shear, OpenAI's second interim CEO, co-founded Justin.tv, and Twitch grew out of it. The original Justin.tv was shut down, not sold, so Twitch is the platform Amazon acquired.\n\n**Evidence** (both pages are Wikipedia, so secondary sources; I did not find a primary source such as an Amazon press release):\n\n- **Shear as interim CEO:** https://en.wikipedia.org/wiki/Emmett_Shear says \"On November 19, 2023, Shear was named as the interim CEO of OpenAI.\" That page also says \"On November 21, an agreement was reached to reinstate Altman as CEO.\"\n- **Co-founding:** The same page says \"He co-founded the live video platform Justin.tv.\" It also says \"In March 2007, Shear and Justin Kan... launched Justin.tv.\" The infobox lists him as \"Former CEO of Twitch.\"\n- **The acquisition:** The Emmett Shear page says \"On August 25, 2014, Amazon officially acquired Twitch for a reported $970,000,000.\" https://en.wikipedia.org/wiki/Twitch_(service) says \"US$970 million in an all-cash deal\" and \"The acquisition closed on September 25, 2014.\"\n- **Justin.tv:** The Emmett Shear page says \"Justin.tv was closed on August 5, 2014.\" The Twitch page says the site \"suddenly ceased operations, citing a need to focus resources entirely on Twitch.\"\n\n**Caveats:**\n- The fetched Wikipedia text did not say Shear was the *second* interim CEO after Mira Murati, so I could not confirm that detail from these pages. The question's premise, along with his November 19 appointment, is consistent with it.\n- The Twitch page was truncated when fetched. I relied only on its verbatim history section for the acquisition and shutdown quotes.\n- The Twitch page says a reported Google deal of about $1 billion \"fell through\" before Amazon's purchase.\n- I did not check the page dates. These are the current Wikipedia versions."
+    },
+    {
+      "id": "q20",
+      "arm": "new",
+      "limited": false,
+      "correct": 1,
+      "cited": 12,
+      "supported": 10,
+      "judges": [
+        {
+          "model": "sonnet",
+          "correct": 1,
+          "cited": 12,
+          "supported": 10,
+          "cost": 0.09364681,
+          "tools": 6
+        }
+      ],
+      "gold": 1,
+      "cost": 0.20825407499999998,
+      "runCost": 0.114607265,
+      "judgeCost": 0.09364681,
+      "tools": [
+        "Read",
+        "ToolSearch",
+        "Agent",
+        "Agent",
+        "WebFetch",
+        "WebFetch",
+        "WebSearch"
+      ],
+      "answer": "**Answer:** Amazon bought Twitch in 2014. Twitch was the live-streaming platform co-founded by Emmett Shear, OpenAI's second interim CEO in November 2023.\n\n**Confidence:** High. Wikipedia and a news source agree on each hop. The Murati-before-Shear order comes from a search summary, not a page I opened.\n\n## Findings\n\n- **Second interim CEO.** Emmett Shear was named OpenAI's interim CEO on November 19, 2023. Wikipedia: \"On November 19, 2023, Shear was named as the interim CEO of OpenAI.\" [1]\n- **Order of the two.** Mira Murati was the first interim CEO, from November 17, and Shear replaced her. BGR's headline says Shear \"Will Replace Mira Murati, Who Replaced Sam Altman.\" [2] I took this from the search result only. Wikipedia's Shear page does not mention Murati as his predecessor, and I did not open the BGR page. [1][2]\n- **The platform.** Shear co-founded Justin.tv, and Twitch was spun off from it. Wikipedia: \"He co-founded the live video platform Justin.tv.\" [1] It also says \"Shear became the chief executive officer of Twitch when it was spun off from Justin.tv.\" [1] On the Twitch page: \"It was introduced in June 2011 as a spin-off of the general-interest streaming platform Justin.tv.\" [3]\n- **Acquirer and year.** Wikipedia: \"On August 25, 2014, Amazon acquired Twitch Interactive for US$970 million in an all-cash deal.\" [3] It adds: \"The acquisition closed on September 25, 2014.\" [3]\n\n## Conflicts and gaps\n\n- If \"the platform\" means Justin.tv rather than Twitch, the answer changes. Justin.tv was shut down in 2014 when Twitch became the company's focus, and I did not verify that. Reading it as Twitch is the likely intent, and the Twitch page's infobox lists Justin.tv as its predecessor. [3]\n- The Wikipedia Shear page says he co-founded Justin.tv, and names Justin Kan and Michael Seibel as his \"eventual Twitch co-founders.\" [1] The search result describes him as \"co-founder of video streaming site Twitch.\" [2]\n- The fetch tool's summary of the Twitch page's later sections was unreliable. I relied only on the text it quoted verbatim, which I did not re-open myself.\n- Wikipedia is a secondary source. I did not find a primary one, such as Amazon's 2014 press release.\n\n## Sources\n\n[1] Emmett Shear, Wikipedia (page last edited 7 Nov 2026). https://en.wikipedia.org/wiki/Emmett_Shear\n[2] \"OpenAI CEO Drama: Ex-Twitch CEO Emmett Shear Will Replace Mira Murati, Who Replaced Sam Altman,\" BGR, Nov 2023 (search result, not opened). https://bgr.com/business/openai-ceo-mira-murati-5-things-to-know-about-sam-altmans-interim-successor/\n[3] Twitch (service), Wikipedia. https://en.wikipedia.org/wiki/Twitch_(service)"
+    },
+    {
+      "id": "q21",
+      "arm": "baseline",
+      "limited": false,
+      "correct": 1,
+      "cited": 6,
+      "supported": 6,
+      "judges": [
+        {
+          "model": "sonnet",
+          "correct": 1,
+          "cited": 6,
+          "supported": 6,
+          "cost": 0.06057064499999999,
+          "tools": 2
+        }
+      ],
+      "gold": 1,
+      "cost": 0.121240655,
+      "runCost": 0.06067001000000001,
+      "judgeCost": 0.06057064499999999,
+      "tools": [
+        "Agent",
+        "WebFetch"
+      ],
+      "answer": "**Answer:** The mountain is Chimborazo, which is in Ecuador. Edward Whymper led the first recorded ascent, reaching the summit on 4 January 1880.\n\n**Sources** (all from one page, https://en.wikipedia.org/wiki/Chimborazo; a subagent fetched it and I haven't read the page myself):\n- **Farthest from Earth's centre:** \"its summit is the farthest point on Earth's surface from its center due to its location along the equatorial bulge.\" The Geography section is more hedged: \"widely reported to be the farthest point on the surface from Earth's center,\" with Huascarán in Peru \"a very close second.\"\n- **Country:** \"is a stratovolcano in Ecuador and the Cordillera Occidental range of the Andes.\" The Location section adds: \"Chimborazo is in the Chimborazo Province of Ecuador.\"\n- **First ascent:** \"On 4 January 1880, the English climber Edward Whymper reached the summit of Chimborazo.\"\n\n**Caveats:**\n- **Single source:** Everything rests on this one Wikipedia page. It is a secondary source, and I did not find a primary one, such as Whymper's own account.\n- **Truncated fetch:** The page was cut off at about 40,000 of 81,841 characters. The quotes above came from the part that was read.\n- **Companions not confirmed:** The page text I got does not name companions for the 1880 ascent, so I can't confirm any from it. It does say Whymper later climbed by a different route \"with the Ecuadorians David Beltrán and Francisco Campaña.\" That was a second climb, not the first.\n- **Page date unverified:** The only date for the page, \"last edited on 25 August 2026,\" came from a summary of the part that was cut off, so I could not verify it.\n- **\"First recorded\":** The claim that this was the first ascent rests on the page's wording. I did not check it against other sources."
+    },
+    {
+      "id": "q21",
+      "arm": "new",
+      "limited": false,
+      "correct": 1,
+      "cited": 5,
+      "supported": 5,
+      "judges": [
+        {
+          "model": "sonnet",
+          "correct": 1,
+          "cited": 5,
+          "supported": 5,
+          "cost": 0.06560542,
+          "tools": 3
+        }
+      ],
+      "gold": 1,
+      "cost": 0.17176311,
+      "runCost": 0.10615769,
+      "judgeCost": 0.06560542,
+      "tools": [
+        "Read",
+        "ToolSearch",
+        "WebSearch",
+        "WebFetch",
+        "Agent",
+        "WebFetch",
+        "WebFetch"
+      ],
+      "answer": "**Answer:** The mountain is Chimborazo, in Ecuador. Edward Whymper led the first recorded ascent on 4 January 1880, climbing with Louis and Jean-Antoine Carrel.\n\n**Confidence:** High. The Wikipedia and NASA pages agree on the farthest-point claim and on Whymper and 1880.\n\n**Findings**\n- Chimborazo's summit is the farthest point on Earth's surface from Earth's centre.\n  - Wikipedia: \"its summit is the farthest point on Earth's surface from its center\" (https://en.wikipedia.org/wiki/Chimborazo)\n  - NASA: \"Although it is not the world's tallest peak, its summit is the point farthest from the Earth's center.\" (https://science.nasa.gov/earth/earth-observatory/chimborazo-and-tungurahua-ecuador-6099/)\n- It is in Ecuador.\n  - Wikipedia: \"Chimborazo is in the Chimborazo Province of Ecuador\" (https://en.wikipedia.org/wiki/Chimborazo)\n  - NASA's page title also says Ecuador, but its body text does not state this for Chimborazo, so I cite Wikipedia for it.\n- Whymper made the first recorded ascent.\n  - Wikipedia: \"On 4 January 1880, the English climber Edward Whymper reached the summit of Chimborazo.\" (https://en.wikipedia.org/wiki/Chimborazo)\n  - NASA: \"No one reached the peak of Chimborazo until 1880, when Edward Whymper, and Louis and Jean-Antoine Carrel climbed it.\" (https://science.nasa.gov/earth/earth-observatory/chimborazo-and-tungurahua-ecuador-6099/)\n\n**Conflicts and gaps**\n- Some search results give other dates, such as 9 January or 4 December 1880. I did not check these. The Wikipedia date of 4 January 1880 is the one I cite.\n- One search result said some critics doubted Whymper reached the summit. I did not verify that.\n- I did not open Wikipedia's Mountaineering section directly, so the \"led\" framing rests on Whymper being the named climber, with the Carrels as his companions.\n- I used a standard-level search, and the page quotes were fetched by a subagent. The Wikipedia page was truncated, but the quoted sentences came from the text it read.\n- I did not write to the vault, as you asked.\n\n**Sources**\n[1] Chimborazo, Wikipedia. https://en.wikipedia.org/wiki/Chimborazo\n[2] Chimborazo and Tungurahua, Ecuador, NASA Earth Observatory. https://science.nasa.gov/earth/earth-observatory/chimborazo-and-tungurahua-ecuador-6099/"
+    },
+    {
+      "id": "q22",
+      "arm": "baseline",
+      "limited": false,
+      "correct": 1,
+      "cited": 2,
+      "supported": 1,
+      "judges": [
+        {
+          "model": "sonnet",
+          "correct": 1,
+          "cited": 2,
+          "supported": 1,
+          "cost": 0.052983195,
+          "tools": 3
+        }
+      ],
+      "gold": 1,
+      "cost": 0.14354999000000002,
+      "runCost": 0.090566795,
+      "judgeCost": 0.052983195,
+      "tools": [
+        "ToolSearch",
+        "WebFetch",
+        "Agent",
+        "WebSearch",
+        "WebFetch",
+        "Agent",
+        "WebFetch",
+        "WebFetch",
+        "WebFetch"
+      ],
+      "answer": "**Answer: the University of Edinburgh.** This is Geoffrey Hinton, born in London, UK. The only support I have is a search-result summary, because I couldn't open any page that states it.\n\n**What I could and couldn't verify**\n\n- **Search summary, not a page I read:** The search tool's summary said the Nobel Committee press release (https://www.nobelprize.org/prizes/physics/2024/press-release/) lists Hinton as \"born 1947 in London, UK\" with a \"PhD 1978 from The University of Edinburgh\". It also said he shared the prize with John J. Hopfield. I don't have a quote from the page itself.\n- **Official source blocked:** The Nobel press release and the nobelprize.org facts page both returned HTTP 403 to my fetcher.\n- **Other pages:**\n  - The ACM bulletin (https://www.acm.org/articles/bulletins/2024/october/geoffrey-hinton-nobel-prize) also returned 403.\n  - The U of T page (https://www.utoronto.ca/celebrates/geoffrey-hinton-wins-2024-nobel-prize-physics) loaded, but it says nothing about his birthplace or PhD. It only says: \"Hinton, who joined U of T as a professor of computer science in 1987\".\n- **Hopfield:** I didn't confirm his birthplace. By elimination, the UK-born laureate is Hinton, based on the summary's London birthplace.\n\nThe answer rests on that one secondary source and I read no primary page. To confirm it, open the Nobel press release or Hinton's biography page on nobelprize.org in a browser.\n\nSources:\n- [Nobel Prize in Physics 2024 press release](https://www.nobelprize.org/prizes/physics/2024/press-release/)\n- [U of T: Geoffrey Hinton wins 2024 Nobel Prize in Physics](https://www.utoronto.ca/celebrates/geoffrey-hinton-wins-2024-nobel-prize-physics)"
+    },
+    {
+      "id": "q22",
+      "arm": "new",
+      "limited": false,
+      "correct": 1,
+      "cited": 6,
+      "supported": 6,
+      "judges": [
+        {
+          "model": "sonnet",
+          "correct": 1,
+          "cited": 6,
+          "supported": 6,
+          "cost": 0.08710837500000002,
+          "tools": 6
+        }
+      ],
+      "gold": 1,
+      "cost": 0.23195938,
+      "runCost": 0.14485100499999998,
+      "judgeCost": 0.08710837500000002,
+      "tools": [
+        "Read",
+        "ToolSearch",
+        "WebSearch",
+        "WebSearch",
+        "Agent",
+        "WebFetch",
+        "WebFetch",
+        "WebFetch",
+        "Agent",
+        "WebFetch",
+        "WebFetch",
+        "WebFetch",
+        "WebFetch"
+      ],
+      "answer": "**Answer:** Geoffrey Hinton, the laureate born in the UK, earned his PhD at the **University of Edinburgh**.\n\n**Confidence:** Medium-high. Wikipedia is the only page I read that gives the Edinburgh PhD. The Nobel Prize pages, the UCL page and the Royal Society page didn't confirm it, because they were blocked or didn't state it. This is a standard lookup, so I ran it at standard level with no vault writes.\n\n## Findings\n\n- **Hinton was born in the UK.** The Wikipedia page for Hinton says: \"Hinton was born on 6 December 1947 in Wimbledon, England\". Its infobox gives \"London, England, UK\". [1]\n- **His PhD is from Edinburgh.** The same page says he \"was awarded a PhD in artificial intelligence in 1978\" at the \"University of Edinburgh\". [1]\n- **He shared the 2024 prize with Hopfield.** The Hinton page says he \"was also awarded, along with John Hopfield, the 2024 Nobel Prize in Physics\". [1] The Royal Society also names \"alongside Professor John J Hopfield\". [3]\n- **The other laureate is American.** The Wikipedia page for Hopfield says: \"John Joseph Hopfield (born July 15, 1933) is an American physicist\". [2] This is why Hinton is the UK-born one.\n\n## Conflicts and gaps\n\n- **PhD year:** The Hinton page's infobox gives the thesis as \"Relaxation and Its Role in Vision (1977)\", while the body text says 1978. This doesn't affect the university.\n- **Nobel Prize pages:** The nobelprize.org pages (laureate facts and summary) returned 403, so I couldn't read Nobel's own biography.\n- **UCL page:** It also returned 403.\n- **Royal Society page:** It gives only his birth year and doesn't mention a PhD.\n- **Canadian Encyclopedia:** The article body came back truncated.\n- **Citations:** I read the Wikipedia quotes through a fetch agent, not directly. I did not independently re-open them.\n\n## Sources\n\n[1] Geoffrey Hinton, Wikipedia. https://en.wikipedia.org/wiki/Geoffrey_Hinton\n[2] John Hopfield, Wikipedia. https://en.wikipedia.org/wiki/John_Hopfield\n[3] Professor Geoffrey Hinton FRS awarded the 2024 Nobel Prize in Physics, Royal Society, 8 Oct 2024. https://royalsociety.org/news/2024/10/geoffrey-hinton-nobel-prize"
+    },
+    {
+      "id": "q23",
+      "arm": "baseline",
+      "limited": false,
+      "correct": 1,
+      "cited": 2,
+      "supported": 2,
+      "judges": [
+        {
+          "model": "sonnet",
+          "correct": 1,
+          "cited": 2,
+          "supported": 2,
+          "cost": 0.06591309,
+          "tools": 4
+        }
+      ],
+      "gold": 1,
+      "cost": 0.131971265,
+      "runCost": 0.06605817500000001,
+      "judgeCost": 0.06591309,
+      "tools": [
+        "ToolSearch",
+        "WebFetch",
+        "Agent",
+        "WebFetch"
+      ],
+      "answer": "**Answer:** The ship was the **Fram**. It had earlier carried **Fridtjof Nansen's** Arctic expedition (1893). Roald Amundsen then used it to reach the South Pole.\n\n**Sources** (one page, read through a fetch subagent):\n\n- https://en.wikipedia.org/wiki/Fram_(ship) — lead section: \"It was designed and built by the Scottish-Norwegian shipwright Colin Archer for Fridtjof Nansen's 1893 Arctic expedition\"\n- Same page, section \"Amundsen's 1910–1912 South Pole expedition\": \"Fram was used by Roald Amundsen in his southern polar expedition from 1910 to 1912\"\n\n**Caveats:**\n- This is a single source, and it is Wikipedia, a secondary one. I did not check a primary or second source.\n- The page's last-edited date was reported as 7 September 2026, but that comes from a model summary, not from text I saw verbatim.\n- The fetch returned only the first ~40,000 of ~128,000 characters verbatim. The quotes above come from that portion.\n- The page's own wording says Fram was *built for* Nansen's expedition. The sentence I have doesn't use \"carried\". Nansen's use of it is well known, but I didn't see that confirmed in the excerpt.\n- That Amundsen's expedition was the first to reach the South Pole is not quoted from the page. I'm giving it from general knowledge."
+    },
+    {
+      "id": "q23",
+      "arm": "new",
+      "limited": false,
+      "correct": 1,
+      "cited": 6,
+      "supported": 6,
+      "judges": [
+        {
+          "model": "sonnet",
+          "correct": 1,
+          "cited": 6,
+          "supported": 6,
+          "cost": 0.08183616000000002,
+          "tools": 4
+        }
+      ],
+      "gold": 1,
+      "cost": 0.17103625000000003,
+      "runCost": 0.08920009000000001,
+      "judgeCost": 0.08183616000000002,
+      "tools": [
+        "Read",
+        "Agent",
+        "Agent",
+        "WebFetch",
+        "WebFetch"
+      ],
+      "answer": "**Answer:** The ship was the *Fram*. Its earlier Arctic expedition was Fridtjof Nansen's (1893–96). Roald Amundsen led the first expedition to the South Pole and sailed south on *Fram*.\n\n**Confidence:** High. Two Wikipedia pages agree on every link in the chain. I did not find a second, independent source. Wikipedia is a secondary source.\n\n## Findings\n- Roald Amundsen led the first expedition to reach the South Pole: \"The first expedition to reach the Geographic South Pole was led by the Norwegian explorer Roald Amundsen.\" The party reached the Pole on 14 December 1911. [1]\n- Amundsen sailed south on *Fram*, which was Nansen's ship: \"He obtained the use of Fridtjof Nansen's polar exploration ship Fram\". [1]\n- *Fram* was built for Nansen's Arctic expedition: \"designed and built by the Scottish-Norwegian shipwright Colin Archer for Fridtjof Nansen's 1893 Arctic expedition\". [2]\n- The *Fram* page confirms the South Pole use: \"Fram was used by Roald Amundsen in his southern polar expedition from 1910 to 1912\". [2]\n\n## Conflicts and gaps\n- *Fram* carried more than one Arctic expedition. Otto Sverdrup also used it for a Canadian Arctic islands expedition in 1898–1902 (\"Otto Sverdrup, who had brought Fram back on the first Arctic voyage, led a scientific expedition\"). [2] Nansen's is the one the question most likely means, since the ship was built for it. Sverdrup is a possible alternative reading.\n- I did not write anything to the vault, as you asked.\n\n## Sources\n[1] Amundsen's South Pole expedition, Wikipedia. https://en.wikipedia.org/wiki/Amundsen%27s_South_Pole_expedition\n[2] Fram (ship), Wikipedia. https://en.wikipedia.org/wiki/Fram_(ship)\n\nI ran this at standard level, although the question is closer to quick-level scope. Both pages were re-fetched by subagents and the quotes confirmed."
+    },
+    {
+      "id": "q24",
+      "arm": "baseline",
+      "limited": false,
+      "correct": 1,
+      "cited": 4,
+      "supported": 2,
+      "judges": [
+        {
+          "model": "sonnet",
+          "correct": 1,
+          "cited": 4,
+          "supported": 2,
+          "cost": 0.072073015,
+          "tools": 4
+        }
+      ],
+      "gold": 1,
+      "cost": 0.17544231999999998,
+      "runCost": 0.103369305,
+      "judgeCost": 0.072073015,
+      "tools": [
+        "Bash",
+        "Agent",
+        "WebFetch",
+        "WebFetch",
+        "WebFetch",
+        "WebFetch",
+        "WebFetch",
+        "Agent",
+        "WebFetch",
+        "WebFetch"
+      ],
+      "answer": "**Answer: 1410.** The 2006 IAU General Assembly was held in Prague, and Prague's astronomical clock (the Orloj) dates to 1410. I'm sure of the clock year. The link between the Assembly and Prague rests only on a weak source.\n\n**Clock year**\n- Source: https://en.wikipedia.org/wiki/Prague_astronomical_clock. A subagent read it and reported the page footer as last edited 1 August 2026. That date was extracted by a model, not read verbatim.\n- Quote: \"The oldest part of the Orloj, the mechanical clock and astronomical dial, dates back to 1410.\"\n- Quote: \"The first recorded mention of the clock was on 9 October 1410.\"\n- The page does not use the word \"installed\". \"Dates back to 1410\" is the closest it comes, and 1410 is also the year of the first recorded mention.\n\n**Prague as the Assembly venue (weakly sourced)**\n- Source: https://en.wikipedia.org/wiki/IAU_definition_of_planet. The only supporting line came from a model-generated summary of the page, not from text read verbatim, so check it on the page before relying on it.\n- Quote: \"Many astronomers were also unable or chose not to make the trip to Prague and, thus, cast no vote.\"\n- The Pluto article says \"The debate came to a head in August 2006 during the triennial meeting of the IAU\", but the text I could verify doesn't name Prague.\n\n**Not found**\n- I found no verified primary source placing the Assembly in Prague.\n- The IAU press release URLs (iau.org/news/pressreleases/detail/iau0603/ and iau0602/) both returned HTTP 404.\n- The Wikipedia page \"2006 General Assembly of the International Astronomical Union\" also returned 404.\n- I found no source for the clock's exact installation date other than Wikipedia, which is a secondary source."
+    },
+    {
+      "id": "q24",
+      "arm": "new",
+      "limited": false,
+      "correct": 1,
+      "cited": 4,
+      "supported": 4,
+      "judges": [
+        {
+          "model": "sonnet",
+          "correct": 1,
+          "cited": 4,
+          "supported": 4,
+          "cost": 0.06513384,
+          "tools": 4
+        }
+      ],
+      "gold": 1,
+      "cost": 0.19919681500000003,
+      "runCost": 0.13406297500000003,
+      "judgeCost": 0.06513384,
+      "tools": [
+        "Read",
+        "ToolSearch",
+        "WebSearch",
+        "WebSearch",
+        "WebFetch",
+        "WebFetch",
+        "Agent",
+        "Agent",
+        "WebFetch",
+        "WebFetch",
+        "Agent",
+        "WebFetch"
+      ],
+      "answer": "**Answer:** The Prague astronomical clock (the Orloj) was first installed in **1410**.\n**Confidence:** High. Two fetched pages support the two hops, and the 1410 date also appeared in several search results.\n\n## Findings\n\n- **Hop 1: the city.** The IAU General Assembly that demoted Pluto met in Prague in August 2006.\n  - Source: https://www.universetoday.com/525/plutos-out-of-the-planet-club/\n  - Quote: \"The International Astronomical Union, currently meeting in Prague, voted on August 24, 2006 to demote Pluto down from planethood status.\" [1]\n  - The same page covers the dwarf-planet category: \"Now Pluto, Charon, Ceres and the newly discovered 2003 UB313 (aka Xena) will merely be known as \"dwarf planets\".\" [1]\n\n- **Hop 2: the clock.** Prague's astronomical clock dates to 1410.\n  - Source: https://en.wikipedia.org/wiki/Prague_astronomical_clock\n  - Quote: \"The oldest part of the Orloj, the mechanical clock and astronomical dial, dates back to 1410\" [2]\n  - The same page gives the first recorded mention: \"The first recorded mention of the clock was on 9 October 1410.\" [2]\n\n## Conflicts and gaps\n\n- **IAU page not read:** I couldn't read the IAU's own press release (https://www.iau.org/news/pressreleases/detail/iau0603). It returned a 404 when fetched, so I didn't cite it. The Prague claim rests on Universe Today, a secondary source. A search snippet also shows the 2006 assembly in Prague, but I did not open that page.\n- **What \"installed in 1410\" covers:** The 1410 date applies to the original mechanism and astronomical dial. The calendar dial and the moving figures were added later, around 1490 or afterwards, per search-result summaries I did not open. The 1410 date is the first installation.\n- **Wikipedia wording:** The 1410 claim is also repeated in several search results, but I didn't open those pages. Wikipedia is a tertiary source.\n- **Depth and vault:** I ran this at standard depth and did not write to the vault, as you asked.\n\n## Sources\n[1] \"Pluto's Out of the Planet Club\", Universe Today, 2006. https://www.universetoday.com/525/plutos-out-of-the-planet-club/\n[2] \"Prague astronomical clock\", Wikipedia. https://en.wikipedia.org/wiki/Prague_astronomical_clock"
+    },
+    {
+      "id": "q25",
+      "arm": "baseline",
+      "limited": false,
+      "correct": 1,
+      "cited": 5,
+      "supported": 5,
+      "judges": [
+        {
+          "model": "sonnet",
+          "correct": 1,
+          "cited": 5,
+          "supported": 5,
+          "cost": 0.073039505,
+          "tools": 4
+        }
+      ],
+      "gold": 1,
+      "cost": 0.14163809,
+      "runCost": 0.068598585,
+      "judgeCost": 0.073039505,
+      "tools": [
+        "Agent",
+        "WebFetch",
+        "WebFetch"
+      ],
+      "answer": "**Answer:** The film is *Oppenheimer*. It is based on the biography *American Prometheus*, which won the **Pulitzer Prize for Biography or Autobiography in 2006**.\n\n**Sources** (I didn't read the Wikipedia pages myself. A fetch subagent read them and passed the quotes back, so they are second-hand. I did not independently check the quotes.)\n\n- **Film and Best Picture:** https://en.wikipedia.org/wiki/Oppenheimer_(film)\n  - \"Based on the 2005 biography American Prometheus by Kai Bird and Martin J. Sherwin\"\n  - \"nominated for thirteen awards at the 96th Academy Awards and won seven, including Best Picture\"\n- **Biography and Pulitzer:** https://en.wikipedia.org/wiki/American_Prometheus\n  - \"won numerous awards, including the 2006 Pulitzer Prize for Biography or Autobiography\"\n  - The page's awards list also shows the 2005 National Book Critics Circle Award and the 2008 Duff Cooper Prize. I got these from the list, not from a quoted sentence.\n\n**Caveats:**\n- Both sources are Wikipedia, which is a secondary source. I did not check the Pulitzer Board's own page (pulitzer.org).\n- I found no page date for either article. The subagent's \"last edited 7 November 2026\" line for the American Prometheus page was not in the text it actually received, so I treat it as unverified.\n- The book was published April 5, 2005, and won the Pulitzer the following year, so don't mix up the two dates."
+    },
+    {
+      "id": "q25",
+      "arm": "new",
+      "limited": false,
+      "correct": 1,
+      "cited": 4,
+      "supported": 4,
+      "judges": [
+        {
+          "model": "sonnet",
+          "correct": 1,
+          "cited": 4,
+          "supported": 4,
+          "cost": 0.073648685,
+          "tools": 6
+        }
+      ],
+      "gold": 1,
+      "cost": 0.22195742499999999,
+      "runCost": 0.14830874,
+      "judgeCost": 0.073648685,
+      "tools": [
+        "Read",
+        "ToolSearch",
+        "WebSearch",
+        "WebSearch",
+        "Agent",
+        "Agent",
+        "Agent",
+        "WebFetch",
+        "Agent",
+        "WebFetch",
+        "Agent",
+        "Agent",
+        "WebFetch",
+        "WebFetch"
+      ],
+      "answer": "**Answer:** The film is *Oppenheimer*. Its source, *American Prometheus: The Triumph and Tragedy of J. Robert Oppenheimer* by Kai Bird and Martin J. Sherwin, won the Pulitzer Prize for Biography in 2006.\n\n**Confidence:** High. Each claim below was re-read on the cited page, and the Pulitzer award is confirmed by two independent pages.\n\n## Findings\n\n1. *Oppenheimer* won Best Picture at the 96th Academy Awards.\n   - NBC News (Mar 10, 2024), https://www.nbcnews.com/pop-culture/awards/christopher-nolan-oppenheimer-best-picture-oscar-win-rcna142530: \"won best picture Sunday at the 96th Academy Awards, along with six other awards.\"\n\n2. The film was adapted from *American Prometheus*.\n   - Same NBC page: Nolan adapted it \"from the Pulitzer Prize-winning biography\" *American Prometheus: The Triumph and Tragedy of J. Robert Oppenheimer*, written by Kai Bird and Martin J. Sherwin.\n\n3. The biography won the Pulitzer Prize for Biography in 2006.\n   - Tufts Journal (May 2006), https://tuftsjournal.tufts.edu/archive/2006/may/briefs/index.shtml: \"Kai Bird have been awarded the 2006 Pulitzer Prize for biography for their book on the life of J. Robert Oppenheimer.\"\n   - PBS NewsHour (Apr 27, 2006), https://www.pbs.org/newshour/show/oppenheimer-biography-garners-pulitzer-prize: \"Authors Martin Sherwin and Kai Bird won this year's Pulitzer Prize in biography for their book, 'American Prometheus.'\"\n\n## Conflicts and gaps\n- I couldn't read the Pulitzer Board's own page (pulitzer.org returned HTTP 403), so I didn't cite it. The Tufts and PBS pages cover the same claim.\n- The Tufts page gives the book's publication year as 2005 (Knopf). The Pulitzer is dated by award year, 2006, not by publication.\n- The search summary also mentioned a National Book Critics Circle Award and a Duff Cooper Prize. I didn't open a page for either, so treat them as unverified.\n\n## Sources\n[1] NBC News, \"Oppenheimer wins best picture\", 2024-03-10. https://www.nbcnews.com/pop-culture/awards/christopher-nolan-oppenheimer-best-picture-oscar-win-rcna142530\n[2] Tufts Journal brief, May 2006. https://tuftsjournal.tufts.edu/archive/2006/may/briefs/index.shtml\n[3] PBS NewsHour, 2006-04-27. https://www.pbs.org/newshour/show/oppenheimer-biography-garners-pulitzer-prize"
+    }
+  ]
+}

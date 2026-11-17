@@ -1,4 +1,4 @@
-#!/usr/bin/env npx tsx
+#!/usr/bin/env -S npx tsx@4.23.15
 /**
  * snapshot.ts — Production-grade Puppeteer-based full-page HTML snapshot
  *
@@ -8,9 +8,9 @@
  * plain HTML, etc.) — no MockPage.jsx needed.
  *
  * Usage:
- *   npx tsx snapshot.ts --url http://localhost:5173 --output .stitch/home.html
- *   npx tsx snapshot.ts --url http://localhost:3000/pricing --output .stitch/pricing.html --html-class dark
- *   npx tsx snapshot.ts --url http://localhost:5173 --output .stitch/page.html --wait 5000 --viewport 1440x900
+ *   npx tsx@4.23.15 snapshot.ts --url http://localhost:5173 --output .stitch/home.html
+ *   npx tsx@4.23.15 snapshot.ts --url http://localhost:3000/pricing --output .stitch/pricing.html --html-class dark
+ *   npx tsx@4.23.15 snapshot.ts --url http://localhost:5173 --output .stitch/page.html --wait 5000 --viewport 1440x900
  *
  * Flags:
  *   --url           URL to capture (required)
@@ -144,7 +144,7 @@ function parseArgs(): Opts {
         break;
       case '--help':
         console.log(`
-Usage: npx tsx snapshot.ts --url <URL> --output <FILE> [options]
+Usage: npx tsx@4.23.15 snapshot.ts --url <URL> --output <FILE> [options]
 
 Options:
   --url           URL to capture (required)

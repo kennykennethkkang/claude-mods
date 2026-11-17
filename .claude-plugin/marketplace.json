@@ -39,6 +39,18 @@
     {
       "name": "phone-mode",
       "source": "./phone-mode"
+    },
+    {
+      "name": "todo-band",
+      "source": "./todo-band"
+    },
+    {
+      "name": "tab-close",
+      "source": "./tab-close"
+    },
+    {
+      "name": "account-guard",
+      "source": "./account-guard"
     }
   ]
 }

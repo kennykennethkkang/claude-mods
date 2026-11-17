@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { wilson, aggregate, decode, personas, report, votesFromRatings } from './crowd-ab.mjs'
+import { wilson, aggregate, decode, personas, report, votesFromRatings, parseDevice } from './crowd-ab.mjs'
 
 const v = (pick, n, seg = { age: '25-34', device: 'phone' }, reason = 'clearer') => Array.from({ length: n }, () => ({ pick, reason, seg }))
 
@@ -58,4 +58,13 @@ test('ratings become votes, close scores are no preference, partial personas dro
   assert.equal(v.length, 2)
   assert.deepEqual([v[0].pick, v[0].reason, v[0].seg.age], [0, 'clearer', '65+'])
   assert.equal(v[1].pick, 'none')
+})
+
+test('--device weights parse, steer personas, reject junk', () => {
+  assert.deepEqual(parseDevice('phone=55,desktop=35,tablet=10'), [['phone', 55], ['desktop', 35], ['tablet', 10]])
+  const ps = personas(200, 3, 2, parseDevice('desktop=1'))
+  assert.ok(ps.every(p => p.seg.device === 'desktop'))
+  assert.deepEqual(personas(5, 7, 2), personas(5, 7, 2, null))
+  for (const bad of ['', 'phone', 'phone=', 'phone=x', 'phone=-1', '=5', 'phone=0', 'phone=5,phone=5', 'phone=Infinity'])
+    assert.throws(() => parseDevice(bad), /--device/, bad)
 })

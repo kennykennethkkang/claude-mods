@@ -1,6 +1,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { guardTarget, guardCandidate, diffLines, decide, loadTasks } from './self-improve.mjs'
+import fs from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { guardTarget, guardCandidate, diffLines, decide, loadTasks, parsePass } from './self-improve.mjs'
 
 const K = '/Users/x/claude-mods/kit'
 
@@ -50,4 +53,22 @@ test('seed evals have a dev and held-out split with checklists', () => {
   assert.ok(t.length >= 3)
   assert.ok(t.some(x => x.split === 'dev') && t.filter(x => x.split === 'heldout').length >= 2)
   for (const x of t) assert.ok(x.prompt && x.checklist.length >= 3)
+})
+
+test('every tuned target has a dev task and two held-out', () => {
+  for (const f of ['agents/Explore.md', 'agents/growth.md', 'agents/engineer-codex.md', 'agents/qa-codex.md', 'skills/aar/SKILL.md', 'skills/toolchain/SKILL.md', 'skills/crowd-ab/SKILL.md']) {
+    const t = loadTasks(`${K}/${f}`)
+    assert.ok(t.some(x => x.split === 'dev'), f)
+    assert.ok(t.filter(x => x.split === 'heldout').length >= 2, f)
+    for (const x of t) assert.ok(x.prompt && x.checklist.length >= 3, x.id)
+  }
+  const ids = JSON.parse(fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '../evals/tasks.json'), 'utf8')).map(x => x.id)
+  assert.equal(new Set(ids).size, ids.length)
+})
+
+test('parsePass rejects a verdict whose length does not match the checklist', () => {
+  assert.deepEqual(parsePass('ok {"pass":[true,0,1]}', 3), [true, false, true])
+  assert.equal(parsePass('{"pass":[true,false]}', 3), null)
+  assert.equal(parsePass('no json here', 2), null)
+  assert.equal(parsePass('{"pass": oops}', 2), null)
 })

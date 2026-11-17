@@ -1,0 +1,9 @@
+{
+  "name": "account-guard",
+  "version": "0.1.6",
+  "description": "Makes sign-in CLIs (aws, and the CLI of each web app on Switchboard's Accounts page) use the account picked for the project, and asks when no project has a pick",
+  "author": {
+    "name": "Kenneth Kang"
+  },
+  "license": "MIT"
+}

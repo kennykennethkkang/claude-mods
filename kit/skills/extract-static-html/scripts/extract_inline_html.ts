@@ -1,4 +1,4 @@
-#!/usr/bin/env npx tsx
+#!/usr/bin/env -S npx tsx@4.23.15
 /**
  * extract_inline_html.ts — Convert JSX/React mock files to self-contained HTML.
  *
@@ -6,7 +6,7 @@
  * Replaces the old extract_inline_html.py script.
  *
  * Usage:
- *   npx tsx extract_inline_html.ts \
+ *   npx tsx@4.23.15 extract_inline_html.ts \
  *     --page src/MockPage.jsx:home.html:"Home Page" \
  *     --index-css src/index.css \
  *     --extra-css index.html \
@@ -122,7 +122,7 @@ function parseArgs(): Opts {
       case '--json': opts.json = true; break;
       case '--help':
         console.log(`
-Usage: npx tsx extract_inline_html.ts --page <spec> [options]
+Usage: npx tsx@4.23.15 extract_inline_html.ts --page <spec> [options]
 
 Options:
   --page             src_file:dst_filename:title (repeatable)

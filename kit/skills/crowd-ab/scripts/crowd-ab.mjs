@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // crowd-ab: synthetic user panel votes between 2-4 options via Jev (fallback: claude -p haiku panel).
-// node crowd-ab.mjs --goal "..." --option "text" --option @file.html [--n 1000] [--cap 1] [--seed 1] [--out dir] [--panel] [--dry-run]
+// node crowd-ab.mjs --goal "..." --option "text" --option @file.html [--n 1000] [--cap 1] [--seed 1] [--device phone=55,desktop=35,tablet=10] [--out dir] [--panel] [--dry-run]
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -44,10 +44,24 @@ const pickW = (r, list) => {
   return list.at(-1)[0]
 }
 
-export function personas(n, seed, k) {
+// "phone=55,desktop=35" -> [['phone', 55], ['desktop', 35]]
+export function parseDevice(s) {
+  const bad = why => { throw new Error(`--device ${why}: want name=weight,... like phone=55,desktop=35,tablet=10`) }
+  const out = String(s ?? '').split(',').map(part => {
+    const m = part.trim().match(/^([a-z][\w -]*)=(\d+(?:\.\d+)?)$/i)
+    if (!m) bad(`bad entry "${part}"`)
+    return [m[1].trim(), +m[2]]
+  })
+  if (new Set(out.map(([d]) => d)).size !== out.length) bad('repeats a device')
+  if (!out.some(([, w]) => w > 0)) bad('needs a weight above 0')
+  return out
+}
+
+export function personas(n, seed, k, device = null) {
   const r = rng(seed)
+  const dims = device ? { ...DIMS, device } : DIMS
   return Array.from({ length: n }, (_, i) => {
-    const seg = Object.fromEntries(Object.entries(DIMS).map(([d, l]) => [d, pickW(r, l)]))
+    const seg = Object.fromEntries(Object.entries(dims).map(([d, l]) => [d, pickW(r, l)]))
     const order = Array.from({ length: k }, (_, j) => j)
     for (let j = k - 1; j > 0; j--) { const s = Math.floor(r() * (j + 1)); [order[j], order[s]] = [order[s], order[j]] }
     const text = `Age ${seg.age}, ${seg.tech} tech skill, on a ${seg.device}, accessibility needs: ${seg.access}, ${seg.intent}, ${seg.patience}.`
@@ -124,7 +138,7 @@ export function report(agg, labels) {
 }
 
 function args(argv) {
-  const a = { option: [], n: null, cap: 1, seed: 1, out: null, panel: false, dryRun: false, label: [] }
+  const a = { option: [], n: null, cap: 1, seed: 1, out: null, panel: false, dryRun: false, label: [], device: null }
   for (let i = 0; i < argv.length; i++) {
     const f = argv[i], v = () => argv[++i]
     if (f === '--goal') a.goal = v()
@@ -133,6 +147,7 @@ function args(argv) {
     else if (f === '--n') a.n = +v()
     else if (f === '--cap') a.cap = +v()
     else if (f === '--seed') a.seed = +v()
+    else if (f === '--device') a.device = parseDevice(v())
     else if (f === '--out') a.out = v()
     else if (f === '--panel') a.panel = true
     else if (f === '--dry-run') a.dryRun = true
@@ -230,7 +245,7 @@ async function main() {
   fs.mkdirSync(dir, { recursive: true })
   const usePanel = a.panel || !jevUp()
   const n = a.n ?? (usePanel ? 30 : 1000)
-  const ps = personas(n, a.seed, texts.length)
+  const ps = personas(n, a.seed, texts.length, a.device)
   if (usePanel) {
     console.log(`Jev ${a.panel ? 'skipped' : 'unavailable'}: haiku panel of ${n} via claude -p (subscription usage, no $ cost).`)
     if (a.dryRun) return

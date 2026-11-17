@@ -1,0 +1,8 @@
+[
+  ["state\\.ts", "project"],
+  ["EMPTY"],
+  ["NotFound", "service\\.py"],
+  ["ItemService", "list_items"],
+  ["ValueError", "line"],
+  ["unittest"]
+]

@@ -9,7 +9,7 @@ const HUB = 'Kenneth presses the git buttons and Stop process in Switchboard him
 
 // flat: matched with \uXXXX and \xNN decoded, then quotes and backslashes stripped, so escaped JSON and quote-split paths read plainly.
 const RULES: { test: RegExp; why: string; short: string; flat?: true }[] = [
-  { test: /\bgit\b(\s+-[cC]\s+\S+)*\s+(commit|push)\b/, short: 'a git commit or push', why: 'Kenneth commits and pushes himself, from his own terminal or VS Code Source Control. Leave the work modified.' },
+  { test: /\bgit\b(\s+-[cC]\s+\S+)*\s+(commit|push)\b/, short: 'a git commit or push', why: 'Kenneth commits and pushes himself, from his own terminal or the editor\'s Source Control. Leave the work modified.' },
   { test: /\bgit\b(\s+-[cC]\s+\S+)*\s+rm\b[^|;&]*--cached/, short: 'git rm --cached', why: 'git rm --cached stages a deletion. Delete with plain rm; if the index was touched, git reset -q -- <paths>.' },
   // The hub's git buttons and Stop process are Kenneth's. A speed bump, not a boundary: a script file gets past it,
   // and a chat with a shell can run git itself. The second rule refuses hub posts whose body or URL is built at run time;

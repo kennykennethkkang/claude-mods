@@ -33,3 +33,12 @@ export function summarize(rows) {
   }
   return out
 }
+
+/** One row's verdict across judges: correct is the mean, cited and supported are pooled. */
+export function mergeJudges(graded) {
+  const n = graded.length
+  return { correct: n ? round(graded.reduce((s, j) => s + j.correct, 0) / n) : 0, cited: graded.reduce((s, j) => s + j.cited, 0), supported: graded.reduce((s, j) => s + j.supported, 0) }
+}
+
+/** Rows split per judge, arm renamed to arm/model, so summarize gives each judge's view. */
+export const perJudge = rows => rows.flatMap(r => (r.judges ?? []).map(j => ({ ...r, ...j, arm: `${r.arm}/${j.model}` })))

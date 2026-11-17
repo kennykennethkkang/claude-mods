@@ -1,0 +1,9 @@
+{
+  "name": "tab-close",
+  "version": "0.1.4",
+  "description": "Closes the browser an agent opened when its turn ends: agent-browser sessions are closed for it, and an open Playwright browser, Chrome MCP tab, Scrapling session or Firecrawl browser holds the stop once until the agent closes it",
+  "author": {
+    "name": "Kenneth Kang"
+  },
+  "license": "MIT"
+}

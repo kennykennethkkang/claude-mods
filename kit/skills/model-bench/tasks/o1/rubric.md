@@ -1,0 +1,12 @@
+Grade CHANGELOG.md, the new release-2.4.0.md and the final reply. Count an item only when the work shows it.
+
+1. Every user-facing change since v2.3.2 has a bullet: `notes sync --dry-run`, accented letters matching in search, `notes ls` on an empty notebook, sync retry on HTTP 429, the faster first search (lazy index), and the `sync.interval` to `sync.intervalSeconds` change.
+2. Internal or unshipped work is left out: no bullet for the vitest bump, search test fixtures, CONTRIBUTING typo, CI coverage dark theme, the admin dashboard axis fix, or CSV export (added then reverted). The draft's "CSV export" and "Dark theme" lines are removed, and nothing from 2.3.2 or earlier (expired token, $EDITOR fallback) is repeated in 2.4.0.
+3. Nothing invented: the draft's "4x faster" claim is gone; any speed figure is the log's (about 40% on the first search, 10k notes); no feature, number or date appears that the log or task does not give.
+4. The entry heading is `## [2.4.0] - 2026-11-12`, placed above 2.3.2, with an empty or removed Unreleased section above it, matching the file's existing heading format.
+5. The config change is under a Breaking section and gives the migration: replace `sync.interval` (minutes) with `sync.intervalSeconds` (seconds), with a correct conversion (minutes times 60, such as 5 becomes 300).
+6. No em dash character (the long dash, U+2014) appears in CHANGELOG.md, release-2.4.0.md or the reply.
+7. Bullets are terse and user-facing: one bullet per change, one line each, no commit hashes and no conventional-commit prefixes such as `feat(sync):` or `fix(cli):`.
+8. Sections follow the CHANGELOG header rule: only Breaking, Added, Changed, Fixed, in that order, empty ones omitted (dry run under Added, faster search under Changed, the three fixes under Fixed).
+9. Links are right: a `[2.4.0]: https://github.com/quillworks/notes-cli/compare/v2.3.2...v2.4.0` line is added and `[Unreleased]` now compares `v2.4.0...HEAD`; the checklist's Previous tag is v2.3.2 and its Compare link matches.
+10. release-2.4.0.md keeps the template headings in order (Release checklist: v2.4.0, Details, Steps, Roster, Sign-off), fills Version 2.4.0 and date 2026-11-12, and lists the steps in dependency order (Freeze main, Update CHANGELOG.md, Bump version, Commit, CI green, Tag v2.4.0, Publish to npm, Create GitHub release, Announce, Unfreeze main) with owners from the roster: Kenneth on the commit, Dev on npm, Sam on the announcement, Priya on the rest. RELEASE_CHECKLIST.md itself is unchanged.

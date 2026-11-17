@@ -1,6 +1,7 @@
 ---
 name: gemini
 description: Use when the user says "gemini", "nano banana", "make an image", "generate images", "make a picture or thumbnail or poster", "watch this video", "what happens in this video", "summarize this YouTube", "notebook", "notebooklm", "answer from these sources", "cite the sources", or hands over a video file, a YouTube link, or a folder of md, txt or pdf sources with a question.
+allowed-tools: [Bash, Read, Write, WebFetch]
 ---
 
 # Gemini

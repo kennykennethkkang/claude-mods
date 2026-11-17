@@ -70,5 +70,5 @@ Only when the user asks for it, or picks one from the report: draft a `SKILL.md`
 
 ## Running it twice a week
 
-Switchboard does it: with Settings, Learn automatically on (the default), one window runs `claude -p` naming this skill in the agent-flow folder twice a week, when usage is under the pause threshold. That run passes each proposal to `self-improve`; Switchboard applies clear wins and files the rest. Without Switchboard, a cron or launchd job running `claude -p "/improve-system"` works; a cloud `/schedule` routine cannot read the local transcripts.
+Switchboard does it: with Settings, Learn automatically on (the default), one window runs `claude -p` naming this skill in the switchboard folder twice a week, when usage is under the pause threshold. That run passes each proposal to `self-improve`; Switchboard applies clear wins and files the rest. Without Switchboard, a cron or launchd job running `claude -p "/improve-system"` works; a cloud `/schedule` routine cannot read the local transcripts.
 

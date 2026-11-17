@@ -1,18 +1,21 @@
 #!/usr/bin/env node
-// A/B: plain researcher prompt vs the deep-research skill, both on sonnet, judged by haiku.
-// node run.mjs [--n 5] [--from 0] [--jobs 2] [--ids q01,q05] [--out results.json]
+// A/B: plain researcher prompt vs the deep-research skill, both on sonnet, each answer graded by every judge.
+// node run.mjs [--n 5] [--from 0] [--jobs 2] [--ids q01,q05] [--level quick] [--judges haiku,sonnet] [--claims 3|all] [--out results.json]
 import { execFile } from 'node:child_process'
 import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { goldMatch, parseJudge, summarize } from './score.mjs'
+import { goldMatch, mergeJudges, parseJudge, perJudge, summarize } from './score.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const KIT = join(HERE, '..', '..', '..')
 const arg = (k, d) => { const i = process.argv.indexOf(`--${k}`); return i > 0 ? process.argv[i + 1] : d }
-if (process.argv.includes('--help')) { console.log('node run.mjs [--n 5] [--from 0] [--jobs 2] [--ids q01,q05] [--out results.json]'); process.exit(0) }
+if (process.argv.includes('--help')) { console.log('node run.mjs [--n 5] [--from 0] [--jobs 2] [--ids q01,q05] [--level quick] [--judges haiku,sonnet] [--claims 3|all] [--out results.json]'); process.exit(0) }
 const N = +arg('n', 5), FROM = +arg('from', 0), JOBS = +arg('jobs', 2), OUT = join(HERE, arg('out', 'results.json')), IDS = arg('ids')?.split(',')
+const LEVEL = arg('level', 'quick'), JUDGES = arg('judges', 'haiku,sonnet').split(','), TURNS = LEVEL === 'quick' ? 40 : 80
+// Round 2 judges checked 3 claims each, too few to split the arms under sonnet. 'all' checks every cited claim.
+const CLAIMS = arg('claims', '3'), JUDGE_TURNS = CLAIMS === 'all' ? 40 : 12
 
 const questions = JSON.parse(readFileSync(join(HERE, 'questions.json'), 'utf8')).filter(q => !IDS || IDS.includes(q.id)).slice(FROM, FROM + N)
 const researcher = readFileSync(join(KIT, 'agents', 'researcher.md'), 'utf8').replace(/^---[\s\S]*?---\n/, '').replace(/^Voice:.*$/m, '').trim()
@@ -20,7 +23,7 @@ const TAIL = 'Give the direct answer first, then cite each claim with a URL and 
 // The new arm reads the skill file directly: in the first run sonnet never called the Skill tool.
 const prompts = {
   baseline: q => `${researcher}\n\nQuestion: ${q}\n\n${TAIL}`,
-  new: q => `Read .claude/skills/deep-research/SKILL.md and follow it at quick level. Do not write to the vault.\n\nQuestion: ${q}\n\n${TAIL}`,
+  new: q => `Read .claude/skills/deep-research/SKILL.md and follow it at ${LEVEL} level. Do not write to the vault.\n\nQuestion: ${q}\n\n${TAIL}`,
 }
 const TOOLS = 'WebSearch,WebFetch,Read,Glob,Grep,Skill'
 
@@ -44,17 +47,21 @@ Candidate answer:
 ${answer}
 >>>
 1. correct: 1 if the candidate's direct answer matches the gold answer in substance, else 0.
-2. Pick up to 3 cited claims the answer depends on (claim plus its URL). WebFetch each URL and set supported: 1 only if the page states that claim. A claim with no URL, or a page that fails to load, is 0. No citations means claims is [].
+2. ${CLAIMS === 'all' ? 'List every cited claim in the answer' : `Pick up to ${CLAIMS} cited claims the answer depends on`} (claim plus its URL). WebFetch each URL and set supported: 1 only if the page states that claim. A claim with no URL, or a page that fails to load, is 0. No citations means claims is [].
 Reply with only JSON: {"correct":0,"claims":[{"claim":"","url":"","supported":0}]}`
 
 async function one(q, arm) {
   const cwd = mkdtempSync(join(tmpdir(), `dr-${arm}-`))
   try {
-    if (arm === 'new') cpSync(join(HERE, '..', 'SKILL.md'), join(mkdirSync(join(cwd, '.claude', 'skills', 'deep-research'), { recursive: true }), 'SKILL.md'))
-    const run = await claude(cwd, 'sonnet', prompts[arm](q.q), TOOLS, 40)
+    // mkdirSync recursive returns the top dir it made, not the leaf, so build the path first.
+    const skillDir = join(cwd, '.claude', 'skills', 'deep-research')
+    if (arm === 'new') { mkdirSync(skillDir, { recursive: true }); cpSync(join(HERE, '..', 'SKILL.md'), join(skillDir, 'SKILL.md')) }
+    const run = await claude(cwd, 'sonnet', prompts[arm](q.q), TOOLS, TURNS)
     const limited = /hit your/i.test(run.text)
-    const judge = limited ? { text: '', cost: 0, tools: [] } : await claude(cwd, 'haiku', judgePrompt(q.q, q.gold, run.text), 'WebFetch', 12)
-    const row = { id: q.id, arm, limited, ...parseJudge(judge.text), gold: goldMatch(run.text, q.aliases), cost: run.cost + judge.cost, runCost: run.cost, judgeCost: judge.cost, tools: run.tools, judgeTools: judge.tools.length, answer: run.text.slice(0, 1500) }
+    const graded = limited ? [] : await Promise.all(JUDGES.map(m => claude(cwd, m, judgePrompt(q.q, q.gold, run.text), 'WebFetch', JUDGE_TURNS).then(j => ({ model: m, ...parseJudge(j.text), cost: j.cost, tools: j.tools.length }))))
+    if (graded.some(j => j.error)) console.log(`${q.id} ${arm}: judge gave no json`)
+    const judgeCost = graded.reduce((n, j) => n + j.cost, 0)
+    const row = { id: q.id, arm, limited, ...mergeJudges(graded), judges: graded, gold: goldMatch(run.text, q.aliases), cost: run.cost + judgeCost, runCost: run.cost, judgeCost, tools: run.tools, answer: run.text }
     console.log(`${q.id} ${arm}: correct ${row.correct} gold ${row.gold} cites ${row.supported}/${row.cited} $${row.cost.toFixed(3)}`)
     return row
   } finally { rmSync(cwd, { recursive: true, force: true }) }
@@ -64,8 +71,14 @@ async function one(q, arm) {
 const queue = questions.flatMap(q => ['baseline', 'new'].map(arm => () => one(q, arm)))
 const rows = []
 let stop = false
-await Promise.all(Array.from({ length: JOBS }, async () => { while (queue.length && !stop) { const r = await queue.shift()(); rows.push(r); if (r.limited) stop = true } }))
-rows.sort((a, b) => a.id.localeCompare(b.id) || a.arm.localeCompare(b.arm))
-const summary = summarize(rows)
-writeFileSync(OUT, `${JSON.stringify({ date: new Date().toISOString(), models: { arms: 'sonnet', judge: 'haiku' }, summary, rows }, null, 2)}\n`)
+// Saved after every row: a killed run used to lose every answer.
+function save() {
+  rows.sort((a, b) => a.id.localeCompare(b.id) || a.arm.localeCompare(b.arm))
+  const summary = summarize(rows), byJudge = summarize(perJudge(rows))
+  writeFileSync(OUT, `${JSON.stringify({ date: new Date().toISOString(), level: LEVEL, models: { arms: 'sonnet', judges: JUDGES }, claims: CLAIMS, summary, byJudge, rows }, null, 2)}\n`)
+  return { summary, byJudge }
+}
+await Promise.all(Array.from({ length: JOBS }, async () => { while (queue.length && !stop) { const r = await queue.shift()(); rows.push(r); save(); if (r.limited) stop = true } }))
+const { summary, byJudge } = save()
 console.table(summary)
+console.table(byJudge)

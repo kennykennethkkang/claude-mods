@@ -73,4 +73,4 @@ For a topic worth keeping: write or update `~/Documents/vault/wiki/<slug>.md` wi
 
 ## Eval
 
-`eval/` holds 15 multi-hop questions with gold answers and a runner that scores this skill against the plain researcher prompt. See `eval/run.mjs --help`.
+`eval/` holds 25 multi-hop questions with gold answers (q16 to q25 are the harder round 2 set) and a runner that scores this skill against the plain researcher prompt, graded by two judges. See `eval/run.mjs --help`.

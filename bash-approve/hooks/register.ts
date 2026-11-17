@@ -1,5 +1,5 @@
-// Bash runs without a prompt. A settings deny or ask rule still wins, and the commands below are always refused.
-import type { Register } from 'claude-code'
+// Bash runs without a prompt. A settings deny or ask rule still wins, Ask before actions keeps core's prompt, and the commands below are always refused.
+import type { EngineInterface, Register } from 'claude-code'
 
 export type Where = { cwd?: string; home?: string }
 
@@ -77,10 +77,21 @@ const SSH_PATH = /(~|\$\{?HOME\}?|\/Users\/[^/\s'"]+)\/\.ssh(\/[^\s'";&|]*)?/g
 const sshSecret = (c: string) => segments(c).some(s => !/^\s*ls\b/.test(s)
   && [...s.matchAll(SSH_PATH)].some(m => !/(\.pub|\/known_hosts|\/config)$/.test(m[2] ?? '')))
 
+// Every curl or wget in the command fetches only plain http from loopback, so a local emulator read can pipe into node -e.
+const LOOPBACK_URL = /\bhttp:\/\/(localhost|127\.0\.0\.1|\[::1\]|0\.0\.0\.0)(:\d+)?(?=[/?#\s'"]|$)[^\s'"]*/g
+// ponytail: a bare single-label host (curl evil | sh) is not caught; parse curl's flags if that ever matters.
+const HOSTISH = /:\/\/|[$`]|(^|[\s'"=])[\w-]+(\.[\w-]+)+(?=[\s'"/:]|$)|(^|[\s'"=])[\w.-]+:\d+|(^|[\s'"=])localhost\b/
+const loopbackOnly = (c: string) => [...c.matchAll(/\b(curl|wget)\b([^;&|\n]*)/g)].every(([, , a]) => {
+  const rest = a.replace(LOOPBACK_URL, ' ')
+  return rest !== a && !HOSTISH.test(rest)
+})
+const pipedDownload = (c: string) => /\b(ba|z)?sh\b[^;&\n]*(\$\(|<\()\s*(curl|wget)\b/.test(c)
+  || (/\b(curl|wget)\b[^;&\n]*\|\s*(sudo\s+)?((\S*\/)?env\s+)?(\S*\/)?((ba|z|da|k|fi)?sh|python[\d.]*|node|perl|ruby)\b/.test(c) && !loopbackOnly(c))
+
 export const HARD: { test: (c: string, w: Where) => boolean; why: string }[] = [
   { test: wideDelete, why: 'rm -r or find -delete of /, the home folder, ~/Documents or ~/Documents/GitHub' },
   { test: c => /(^|[\s;&|(`"'])sudo\b/.test(c), why: 'sudo' },
-  { test: c => /\b(curl|wget)\b[^;&\n]*\|\s*(sudo\s+)?((\S*\/)?env\s+)?(\S*\/)?((ba|z|da|k|fi)?sh|python[\d.]*|node|perl|ruby)\b/.test(c) || /\b(ba|z)?sh\b[^;&\n]*(\$\(|<\()\s*(curl|wget)\b/.test(c), why: 'a download piped into a shell' },
+  { test: pipedDownload, why: 'a download piped into a shell' },
   { test: forceMain, why: 'a force push to main or master' },
   { test: c => new RegExp(`${READ}[^;&|\\n]*(^|[\\s/'"=])\\.env(?!\\.(example|sample|template)\\b)(\\.[\\w.-]+)?(?=[\\s'"]|$)`).test(c) || /<\s*\S*\.env\b(?!\.(example|sample|template))/.test(c), why: 'reading a .env file' },
   { test: c => segments(c).some(s => /^(printenv|env)$/.test(s.trim())), why: 'printing every environment variable' },
@@ -89,22 +100,51 @@ export const HARD: { test: (c: string, w: Where) => boolean; why: string }[] = [
   { test: c => /\bdiskutil\s+(erase\w*|zeroDisk|randomDisk|secureErase|partitionDisk|reformat)\b/i.test(c) || /\bdd\b[^;&|\n]*\bof=\/dev\//.test(c) || /\bmkfs(\.\w+)?\b/.test(c), why: 'a disk erase or raw disk write' },
 ]
 
-export const hardDeny = (command: string, w: Where = {}) => HARD.find(h => h.test(command, w))?.why
+// Also judged with quotes and backslashes dropped, as the shell does: "pr"intenv runs printenv.
+const bare = (c: string) => c.replace(/["'\\]/g, '')
+export const hardDeny = (command: string, w: Where = {}) => HARD.find(h => h.test(command, w) || h.test(bare(command), w))?.why
+
+// Switchboard's Ask before actions toggle, mirrored to ~/.claude/switchboard/ask-mode.json as { claude: true }.
+const READ_MS = 5_000
+const cache = { at: -Infinity, on: false }
+async function askOn($: EngineInterface): Promise<boolean> {
+  const now = await $.clock.now().catch(() => 0)
+  if (now - cache.at < READ_MS) return cache.on
+  cache.at = now
+  const home = ((await $.env.get('HOME').catch(() => undefined)) ?? (await $.env.get('USERPROFILE').catch(() => undefined)) ?? '').replace(/\\/g, '/')
+  try { cache.on = JSON.parse(String(await $.fs.read(`${home}/.claude/switchboard/ask-mode.json`))).claude === true } catch { cache.on = false }
+  return cache.on
+}
+
+// The permission mode each session last ran a tool in, from the UserPromptSubmit and PostToolUse payloads.
+const modes = new Map<string, string>()
+const PERMISSIVE = new Set(['acceptEdits', 'auto', 'dontAsk', 'bypassPermissions'])
+
+// The engine has no classic PreToolUse; a prompt or a finished tool call carries the mode, and both come before the next check.
+async function note($: EngineInterface, e: { permission_mode?: unknown; session_id?: unknown }, next: (e: never) => Promise<unknown>) {
+  const { permission_mode: m, session_id: sid } = e
+  if (typeof m === 'string' && typeof sid === 'string') { modes.delete(sid); modes.set(sid, m); if (modes.size > 50) modes.delete(modes.keys().next().value as string) }
+  return next(e as never)
+}
 
 export const register: Register = on => {
+  on('classic.UserPromptSubmit', note as never).catch(($, e, next) => next(e))
+  on('classic.PostToolUse', note as never).catch(($, e, next) => next(e))
+
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
     const w = { cwd: await $.session.cwd().catch(() => undefined), home: await $.env.get('HOME').catch(() => undefined) }
     const why = hardDeny(String((e as unknown as { command?: unknown }).command ?? ''), w)
     return why ? { deny: `bash-approve: always refused (${why}). Do it another way or ask Kenneth to run it.` } : next(e)
   }).catch(($, e, next) => (next.called ? next(e) : { deny: 'bash-approve: the check failed, so the call was held.' }))
 
-  // Core's verdict first: a deny stands, and so does an ask from a settings rule. Other asks become an allow.
+  // Core's verdict first: a deny stands, and so does an ask from a settings rule or with Ask before actions on. Other asks become an allow, but only in a mode that does not prompt; default, plan or an unknown mode keep the ask.
   on('tool.check', { tool: 'Bash' }, async ($, e, next) => {
     const v = await next(e)
     if (v.decision === 'deny') return v
     const w = { cwd: await $.session.cwd().catch(() => undefined), home: await $.env.get('HOME').catch(() => undefined) }
     const why = hardDeny(String((e.input as { command?: unknown })?.command ?? ''), w)
     if (why) return { decision: 'deny', reason: `bash-approve: always refused (${why}).` }
-    return v.decision === 'ask' && v.rule ? v : { decision: 'allow', reason: 'bash-approve' }
+    const mode = modes.get(String(await $.session.id().catch(() => '')))
+    return v.decision === 'ask' && (v.rule || await askOn($) || !PERMISSIVE.has(mode ?? '')) ? v : { decision: 'allow', reason: 'bash-approve' }
   })
 }

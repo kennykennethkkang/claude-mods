@@ -1,7 +1,8 @@
 import { expect, test } from 'claude-code/testing'
 import type { EngineInterface, SessionContextBreakdown } from 'claude-code'
 
-import { branchFor, budgetDenial, creditsIn, deliver, poll, dietOf, endsAsking, ensureOpenTasks, handoffDenial, handoffNote, homeOf, jevRun, heldNow, holdDenial, holdLine, holdTick, hubHold, overLimit, untilText, liveShells, maybeHandoff, nearFull, norm, notePlan, noteShell, noteTasks, ownerOf, pausedDenial, redact, restoreFeed, roleModel, shellsDone, summaryOf, targetsOf } from '../hooks/register.ts'
+import { agentFileModel, cleanReport, debugBrief, escalationNote, learnRun, memoryDir, pickModel, type Learned, type Run } from '../hooks/register.ts'
+import { carryGoal, indefiniteOn, indefiniteStop, indefiniteDenial, indefiniteAsk, branchFor, budgetDenial, creditsIn, deliver, poll, dietOf, endsAsking, ensureOpenTasks, handoffDenial, handoffNote, homeOf, jevRun, heldNow, noteActive, holdDenial, holdLine, holdTick, hubHold, overLimit, untilText, liveShells, maybeHandoff, nearFull, norm, notePlan, noteShell, noteTasks, ownerOf, pausedDenial, redact, restoreFeed, shellsDone, summaryOf, targetsOf } from '../hooks/register.ts'
 
 test('reports to every Switchboard window, whatever folder it has open', () => {
   const files = [
@@ -170,13 +171,213 @@ test('only the window holding the chat opens the fresh chat, the deepest one', (
   expect(nearFull(100_000, undefined)).toBe(false)
 })
 
-test('puts each role on its model and leaves other agents alone', () => {
-  expect(roleModel('engineer')).toBe('opus')
-  expect(roleModel('general-purpose')).toBe('opus')
-  expect(roleModel('Explore')).toBe('haiku')
-  expect(roleModel('researcher')).toBe('haiku')
-  expect(roleModel('growth')).toBe('sonnet')
-  expect(roleModel('bland:norm')).toBeUndefined()
+test('takes each role model from its agent file frontmatter', () => {
+  expect(agentFileModel('---\nname: engineer\nmodel: opus\n---\nbody')).toBe('opus')
+  expect(agentFileModel('---\nname: qa\nmodel: "sonnet" # cheap\n---\n')).toBe('sonnet')
+  expect(agentFileModel('---\nname: x\nmodel: inherit\n---\n')).toBeUndefined()
+  expect(agentFileModel('---\nname: x\n---\nmodel: opus in the body is no setting')).toBeUndefined()
+  expect(agentFileModel('no frontmatter')).toBeUndefined()
+})
+
+test('reads a Report as clean only on a plain done, and spots debugging briefs', () => {
+  expect(cleanReport('Report\nStatus: done\nChanged: a.ts')).toBe(true)
+  expect(cleanReport('**Status:** done.')).toBe(true)
+  expect(cleanReport('Status: done with concerns')).toBe(false)
+  expect(cleanReport('Status: blocked')).toBe(false)
+  expect(cleanReport('no report at all')).toBe(false)
+  expect(debugBrief('Fix the failing test in board.tsx')).toBe(true)
+  expect(debugBrief('Stack trace below')).toBe(true)
+  expect(debugBrief('Redesign the card layout')).toBe(false)
+  expect(debugBrief('Debugging the layout')).toBe(true)
+  expect(debugBrief('errors in the console')).toBe(true)
+  expect(debugBrief('tests fail on CI')).toBe(true)
+  expect(debugBrief('two bugs in the parser')).toBe(true)
+  expect(debugBrief('redesign the error banner')).toBe(false)
+  expect(debugBrief('rework the crash screen look')).toBe(false)
+})
+
+const run = (o: Partial<Run> & { files: string[] }): Omit<Run, 'round'> => ({ role: 'designer', brief: 'Redesign board.tsx', model: 'sonnet', clean: false, ...o })
+
+test('three redesign rounds on one component raise the role a step, then resolve and cool down', () => {
+  const P = '/u/App'
+  const runs: Run[] = []
+  let learned: Learned[] = []
+  const step = (r: Omit<Run, 'round'>, now = 1) => {
+    const out = learnRun(runs, learned, r, P, now)
+    runs.push({ ...r, round: out.round })
+    learned = out.learned
+    return out
+  }
+  step(run({ files: ['/u/App/web/board.tsx'] }))
+  expect(step(run({ files: ['/u/App/web/board.tsx', '/u/App/web/board.css'] })).round).toBe(2)
+  const third = step(run({ files: ['/u/App/web/board.css'] }), 5)
+  expect(third.changed).toBe(true)
+  expect(learned).toEqual([{ project: P, role: 'designer', files: ['web/board.css'], from: 'sonnet', to: 'opus', reason: '3 redesign rounds without a clean Report', at: 5 }])
+  expect(pickModel('sonnet', 'designer', 'Polish web/board.css spacing', learned, P)).toBe('opus')
+  expect(pickModel('sonnet', 'designer', 'Polish board.css spacing', learned, P)).toBe('sonnet')
+  expect(pickModel('sonnet', 'designer', 'New login page', learned, P)).toBe('sonnet')
+  expect(pickModel('sonnet', 'engineer', 'board.css', learned, P)).toBe('sonnet')
+  expect(pickModel(undefined, 'designer', 'web/board.css', learned, P)).toBe('opus')
+  expect(pickModel('fable', 'designer', 'board.css', learned, P)).toBe('fable')
+  // The raised run ends clean: it is the fix.
+  step(run({ files: ['/u/App/web/board.css'], model: 'claude-opus-5-5', clean: true }))
+  expect(learned[0].resolvedBy).toBe('opus')
+  for (let i = 0; i < 4; i++) step(run({ files: ['/u/App/web/board.css'], model: 'opus', clean: true }))
+  expect(learned.length).toBe(1)
+  // Fifth clean run at the raised level drops it back to where it started.
+  step(run({ files: ['/u/App/web/board.css'], model: 'opus', clean: true }))
+  expect(learned).toEqual([])
+})
+
+test('a brief names a component by its project-relative path, never a bare basename', () => {
+  const learned: Learned[] = [{ project: '/u/App', role: 'engineer', files: ['src/x/index.ts'], from: 'sonnet', to: 'opus', reason: 'r', at: 1 }]
+  expect(pickModel('sonnet', 'engineer', 'Rework src/x/index.ts exports', learned, '/u/App')).toBe('opus')
+  expect(pickModel('sonnet', 'engineer', 'Rework index.ts exports', learned, '/u/App')).toBe('sonnet')
+  expect(pickModel('sonnet', 'engineer', 'Rework src/y/index.ts exports', learned, '/u/App')).toBe('sonnet')
+})
+
+test('debugging, clean runs and other files never count as redesign churn', () => {
+  const P = '/u/App'
+  const chain = (rs: Omit<Run, 'round'>[]) => {
+    const runs: Run[] = []
+    let learned: Learned[] = []
+    for (const r of rs) { const o = learnRun(runs, learned, r, P, 1); runs.push({ ...r, round: o.round }); learned = o.learned }
+    return { runs, learned }
+  }
+  const f = ['/u/App/a.ts']
+  expect(chain([run({ files: f }), run({ files: f, brief: 'fix the crash in a.ts' }), run({ files: f })]).learned).toEqual([])
+  expect(chain([run({ files: f }), run({ files: f, clean: true }), run({ files: f }), run({ files: f })]).learned).toEqual([])
+  expect(chain([run({ files: f }), run({ files: ['/u/App/b.ts'] }), run({ files: f })]).learned).toEqual([])
+  // A qa run that found problems in between makes a clean run count as not clean.
+  const qa = (clean: boolean) => run({ role: 'qa', files: [], clean })
+  const done = run({ files: f, clean: true })
+  expect(chain([done, qa(false), done, qa(false), run({ files: f })]).learned.length).toBe(1)
+  expect(chain([done, qa(true), done, qa(true), run({ files: f })]).learned).toEqual([])
+})
+
+test('writes the escalations note with frontmatter for the project memory', () => {
+  const note = escalationNote([{ project: '/u/App', role: 'designer', files: ['web/board.css'], from: 'sonnet', to: 'opus', reason: 'r', at: Date.parse('2026-11-11T00:00:00Z'), resolvedBy: 'opus' }])
+  expect(note).toMatch(/^---\nname: Model escalations\ndescription: .+\nmetadata:\n {2}type: project\n---\n/)
+  expect(note).toContain('- web/board.css: designer, sonnet failed 3 redesign rounds, opus fixed it (2026-11-11)')
+  expect(memoryDir('/u', '/u/Documents/App')).toBe('/u/.claude/projects/-u-Documents-App/memory')
+  expect(memoryDir('/u', '/u/my_app.v2')).toBe('/u/.claude/projects/-u-my-app-v2/memory')
+})
+
+test('a spawn runs on its agent file model, raised by what this project learned, and learns from reports', async ($, on) => {
+  const files = new Map<string, string>([
+    ['/u/.claude/agents/designer.md', '---\nname: designer\nmodel: sonnet\n---\n'],
+    ['/u/.claude/agents/ops.md', '---\nname: ops\nmodel: inherit\n---\n'],
+  ])
+  let company = {}
+  on('env.get', (_, e) => ({ value: e.name === 'HOME' ? '/u' : undefined }))
+  on('session.id', () => ({ value: 'chat-learn' }))
+  on('session.cwd', () => ({ value: '/u/App' }))
+  let now = Date.parse('2026-11-11T00:00:00Z')
+  on('clock.now', () => ({ value: now }))
+  on('clock.sleep', () => new Promise(() => {}))
+  storeOn(on as never)
+  on('fs.stat', (_, e) => (files.has(String(e.path)) ? { value: { kind: 'file', size: 1, mtimeMs: 1, isLink: false } } : Promise.reject(new Error('missing'))))
+  on('fs.list', () => ({ value: [] }))
+  on('fs.read', (_, e) => {
+    const p = String(e.path)
+    if (p.endsWith('company.json')) return { value: JSON.stringify(company) }
+    return files.has(p) ? { value: files.get(p) } : Promise.reject(new Error('missing'))
+  })
+  on('fs.write', (_, e) => { files.set(String(e.path), String(e.text)); return { value: undefined } })
+  on('http.fetch', () => new Promise(() => {}))
+  let n = 0
+  on('agent.spawn', (_, e) => ({ model: e.model ?? 'inherited', agentId: `a${++n}` }))
+  on('tool.call', () => ({ result: {} }))
+  on('turn.complete', () => ({ text: '' }))
+  const spawn = (subagentType: string, prompt: string) => $.agent.spawn({ subagentType, prompt, description: 'x' } as never)
+  const round = async (answer: string) => {
+    const s = await spawn('designer', 'Redesign web/board.tsx')
+    await $.tool.call({ tool: 'Edit', file_path: '/u/App/web/board.tsx', old_string: 'a', new_string: 'b', agentId: s.agentId } as never)
+    await $.turn.complete({ answer, durationMs: 1, isAborted: false, turnId: 't', reason: 'answer', agentId: s.agentId } as never)
+    return s
+  }
+  expect((await spawn('ops', 'notes')).model).toBe('inherited')
+  expect((await spawn('bland:norm', 'x')).model).toBe('inherited')
+  expect((await round('Status: done with concerns')).model).toBe('sonnet')
+  await round('Status: blocked')
+  await round('Status: done with concerns')
+  const learned = JSON.parse(files.get('/u/.claude/switchboard/model-learn.json') ?? '[]')
+  expect(learned[0]).toMatchObject({ project: '/u/App', role: 'designer', files: ['web/board.tsx'], from: 'sonnet', to: 'opus' })
+  expect(files.get('/u/.claude/projects/-u-App/memory/model-escalations.md')).toContain('web/board.tsx: designer, sonnet failed 3 redesign rounds')
+  expect(files.get('/u/.claude/projects/-u-App/memory/MEMORY.md')).toContain('(model-escalations.md)')
+  expect((await spawn('designer', 'Tidy web/board.tsx')).model).toBe('opus')
+  // Smart switch off: the agent file alone.
+  company = { smartModelSwitch: false }
+  now += 11_000
+  expect((await spawn('designer', 'Tidy web/board.tsx')).model).toBe('sonnet')
+})
+
+test('keeps another chat\'s learned entry when its write lands over ours', async ($, on) => {
+  const files = new Map<string, string>([
+    ['/u/.claude/agents/designer.md', '---\nname: designer\nmodel: sonnet\n---\n'],
+    ['/u/.claude/agents/ops.md', '---\nname: ops\nmodel: inherit\n---\n'],
+  ])
+  let company = {}
+  on('env.get', (_, e) => ({ value: e.name === 'HOME' ? '/u' : undefined }))
+  on('session.id', () => ({ value: 'chat-learn' }))
+  on('session.cwd', () => ({ value: '/u/App' }))
+  let now = Date.parse('2026-11-11T00:00:00Z')
+  on('clock.now', () => ({ value: now }))
+  on('clock.sleep', () => new Promise(() => {}))
+  storeOn(on as never)
+  on('fs.stat', (_, e) => (files.has(String(e.path)) ? { value: { kind: 'file', size: 1, mtimeMs: 1, isLink: false } } : Promise.reject(new Error('missing'))))
+  on('fs.list', () => ({ value: [] }))
+  on('fs.read', (_, e) => {
+    const p = String(e.path)
+    if (p.endsWith('company.json')) return { value: JSON.stringify(company) }
+    return files.has(p) ? { value: files.get(p) } : Promise.reject(new Error('missing'))
+  })
+  const other = { project: '/u/Other', role: 'qa', files: ['x.ts'], from: 'sonnet', to: 'opus', reason: 'r', at: 1 }
+  let clobbered = false
+  on('fs.write', (_, e) => {
+    const p = String(e.path)
+    files.set(p, String(e.text))
+    // another chat's stale write lands once, after ours, holding only its own entry
+    if (p.endsWith('model-learn.json') && !clobbered) { clobbered = true; files.set(p, JSON.stringify([other])) }
+    return { value: undefined }
+  })
+  on('http.fetch', () => new Promise(() => {}))
+  let n = 0
+  on('agent.spawn', (_, e) => ({ model: e.model ?? 'inherited', agentId: `a${++n}` }))
+  on('tool.call', () => ({ result: {} }))
+  on('turn.complete', () => ({ text: '' }))
+  const spawn = (subagentType: string, prompt: string) => $.agent.spawn({ subagentType, prompt, description: 'x' } as never)
+  const round = async (answer: string) => {
+    const s = await spawn('designer', 'Redesign web/board.tsx')
+    await $.tool.call({ tool: 'Edit', file_path: '/u/App/web/board.tsx', old_string: 'a', new_string: 'b', agentId: s.agentId } as never)
+    await $.turn.complete({ answer, durationMs: 1, isAborted: false, turnId: 't', reason: 'answer', agentId: s.agentId } as never)
+    return s
+  }
+  await round('Status: done with concerns')
+  await round('Status: blocked')
+  await round('Status: done with concerns')
+  const learned = JSON.parse(files.get('/u/.claude/switchboard/model-learn.json') ?? '[]')
+  expect(learned.map((l: { project: string }) => l.project).sort()).toEqual(['/u/App', '/u/Other'])
+})
+
+test('advanced mode for this project tells the lead to follow the stages skill', async ($, on) => {
+  on('session.id', () => ({ value: 'chat-stage-1' }))
+  let company: unknown = {}
+  let now = 1e12
+  on('env.get', (_, e) => ({ value: e.name === 'HOME' ? '/u' : undefined }))
+  on('session.cwd', () => ({ value: '/u/App' }))
+  on('clock.now', () => ({ value: now }))
+  on('fs.read', (_, e) => (String(e.path).endsWith('company.json') ? { value: JSON.stringify(company) } : Promise.reject(new Error('missing'))))
+  on('prompt.compose', () => ({ sections: [] }))
+  const compose = async () => JSON.stringify(await $.prompt.compose({ sections: [], promptModel: 'opus', outputStyle: null, tools: [], traits: [], surfaces: [] } as never))
+  expect(await compose()).not.toContain('stages')
+  company = { advancedMode: { '/u/Other': true } }
+  now += 11_000
+  expect(await compose()).not.toContain('stages')
+  company = { advancedMode: { '/u/App': true } }
+  now += 11_000
+  expect(await compose()).toContain('`stages` skill')
+  expect(await compose()).toContain("this chat's id is chat-stage-1")
 })
 
 test('holds a role past its budget for the day', () => {
@@ -668,7 +869,7 @@ test('a handoff note has short fixed fields, done tasks as a count, and the old 
     summary: { goal: 'Ship the handoff', tests: 'pnpm test, 40 pass', decisions: ['wait for shells: they do not carry over'], next: 'run qa' },
     running: ['shell b1: npm run dev, output /t/b1.output'], results: ['qa: 3 problems found (/u/sub/agent-q1.jsonl)'], changed: [' M src/a.ts', '?? src/b.ts'],
   })
-  const order = ['Recreate every open task', '## Last request, verbatim', '## Goal', 'Ship the handoff', '## State', 'Tests last run: pnpm test, 40 pass', '## Decisions', '- wait for shells: they do not carry over', '## Open tasks', '- [ ] Test it (in progress)', '## Running work', '- shell b1: npm run dev, output /t/b1.output', '## Subagent results', '## Files touched', 'src/a.ts', '## Next action', 'run qa', '## Earlier requests', '> never commit', 'Old transcript: /u/.claude/projects/-u-Armasu/abcdef123456.jsonl']
+  const order = ['Recreate every open task', '## Last request, verbatim', '## Goal', 'Ship the handoff', '## State', 'Tests last run: pnpm test, 40 pass', '## Decisions', '- wait for shells: they do not carry over', '## Open tasks', '- [ ] Test it (in progress)', '## Running work', 'The old chat may still be running these', '- shell b1: npm run dev, output /t/b1.output', '## Subagent results', '## Files touched', 'src/a.ts', '## Next action', 'run qa', '## Earlier requests', '> never commit', 'Old transcript: /u/.claude/projects/-u-Armasu/abcdef123456.jsonl']
   order.reduce((prev, s) => { const i = note.indexOf(s); expect(i).toBeGreaterThan(prev); return i }, -1)
   expect(note).toContain('Old session: abcdef123456')
   expect(note).toContain('1 task done')
@@ -822,16 +1023,17 @@ test('the fresh chat is told which open tasks from the note it has not recreated
 })
 
 // The harness pieces the pause tests share: one window at port 7, a chat in /u/Armasu.
-function pauseRig(on: (op: never, fn: never) => void, id: string, o: { tokens: () => number; keep: () => { status: number; text: string }; agents?: () => unknown[]; prompts: string[]; posts: string[]; notes: string[] }) {
+function pauseRig(on: (op: never, fn: never) => void, id: string, o: { tokens: () => number; keep: () => { status: number; text: string }; agents?: () => unknown[]; transcript?: string; store?: Record<string, unknown>; now?: () => number; prompts: string[]; posts: string[]; notes: string[] }) {
   const h = on as unknown as (op: string, fn: (_: unknown, e: Record<string, any>) => unknown) => void
   h('env.get', () => ({ value: '/u' }))
   h('session.id', () => ({ value: id }))
   h('session.cwd', () => ({ value: '/u/Armasu' }))
   h('session.root', () => ({ value: '/u/Armasu' }))
   h('session.usage', () => ({ value: { context: { tokens: o.tokens(), breakdown: { autoCompactThreshold: 167_000 } }, rateLimits: [], startedAt: 0 } }))
-  h('clock.now', () => ({ value: 9.95e12 }))
+  h('clock.now', () => ({ value: o.now?.() ?? 9.95e12 }))
   h('agent.list', () => ({ value: o.agents?.() ?? [] }))
-  h('process.run', () => ({ value: { exitCode: 0, stdout: '', stderr: '' } }))
+  // tail -c N on the chat's transcript: its last N characters.
+  h('process.run', (_, e) => ({ value: { exitCode: 0, stdout: e.argv[0] === 'tail' && e.argv[3] === `/u/.claude/projects/-u-Armasu/${id}.jsonl` ? (o.transcript ?? '').slice(-Number(e.argv[2])) : '', stderr: '' } }))
   h('fs.list', (_, e) => ({ value: String(e.path).includes('plans') ? [] : [{ name: 'w.json', kind: 'file', size: 1, mtimeMs: 0, isLink: false }] }))
   h('fs.read', (_, e) => ({ value: String(e.path).endsWith('w.json') ? JSON.stringify({ port: 7, workspace: '/u/Armasu', hubToken: 't' }) : '' }))
   h('fs.write', (_, e) => { o.notes.push(String(e.text)); return { value: undefined } })
@@ -844,7 +1046,7 @@ function pauseRig(on: (op: never, fn: never) => void, id: string, o: { tokens: (
   h('prompt.submit', (_, e) => { o.prompts.push(String(e.text)); return { text: e.text } })
   h('turn.complete', () => ({ text: '' }))
   h('agent.spawn', (_, e) => ({ model: e.model ?? 'opus' }))
-  storeOn(on as never)
+  storeOn(on as never, o.store)
 }
 
 test('a pause ends when the window says compact, or the context drops after a compaction', async ($, on) => {
@@ -893,6 +1095,59 @@ test('a shell left after the wrap-up gets one follow-up, then the handoff lists 
   await end()
   expect(o.posts.filter(p => p.includes('"kind":"handoff"')).length).toBe(1)
   expect(o.notes.join('')).toContain('- shell dev1: npm run dev')
+})
+
+const absorbedFor = (id: string) => JSON.stringify({ type: 'queue-operation', operation: 'remove', content: `<task-notification>\n<task-id>${id}</task-id>\n<status>completed</status>\n</task-notification>`, reason: 'absorbed_mid_turn' })
+
+test('only the transcript tail is scanned for absorbed notices: one further back is missed', async ($, on) => {
+  const o = { prompts: [] as string[], posts: [] as string[], notes: [] as string[] }
+  const transcript = `${absorbedFor('old1')}\n${'x'.repeat(2_100_000)}\n${absorbedFor('new1')}\n`
+  pauseRig(on as never, 'chat-absorb-2', { ...o, transcript, tokens: () => 152_000, keep: () => ({ status: 200, text: '{"onFull":"fresh"}' }) })
+  let id = 'old1'
+  on('tool.call', () => ({ result: { backgroundTaskId: id } }))
+  await $.tool.call({ tool: 'Bash', command: 'npm test', run_in_background: true } as never)
+  id = 'new1'
+  await $.tool.call({ tool: 'Bash', command: 'npm run build', run_in_background: true } as never)
+  await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 't', reason: 'answer' } as never)
+  expect(o.prompts[0]).toContain('old1')
+  expect(o.prompts[0].includes('new1')).toBe(false)
+})
+
+test('a shell whose notice was absorbed mid turn is not listed as running', async ($, on) => {
+  const o = { prompts: [] as string[], posts: [] as string[], notes: [] as string[] }
+  pauseRig(on as never, 'chat-absorb-1', { ...o, transcript: `{"type":"user"}\n${absorbedFor('gone1')}\n`, tokens: () => 152_000, keep: () => ({ status: 200, text: '{"onFull":"fresh"}' }) })
+  let id = 'gone1'
+  on('tool.call', () => ({ result: { backgroundTaskId: id } }))
+  await $.tool.call({ tool: 'Bash', command: 'npm test', run_in_background: true } as never)
+  id = 'live1'
+  await $.tool.call({ tool: 'Bash', command: 'npm run dev', run_in_background: true } as never)
+  await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 't', reason: 'answer' } as never)
+  expect(o.prompts[0]).toContain('live1')
+  expect(o.prompts[0].includes('gone1')).toBe(false)
+})
+
+test('the pause prompt asks running subagents to report before any TaskStop', async ($, on) => {
+  const o = { prompts: [] as string[], posts: [] as string[], notes: [] as string[] }
+  pauseRig(on as never, 'chat-pause-ask', { ...o, tokens: () => 152_000, keep: () => ({ status: 200, text: '{"onFull":"fresh"}' }), agents: () => [{ id: 'e1', type: 'engineer', description: 'x', status: 'running' }] })
+  await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 't', reason: 'answer' } as never)
+  expect(o.prompts[0]).toContain('SendMessage each running subagent to stop new edits, leave its files type-clean and report done vs not done; wait for the reports, and TaskStop only one that does not answer.')
+  expect(o.prompts[0].includes('Wait for running subagents')).toBe(false)
+})
+
+test('a note with no recorded tasks says so and lists subagents stopped by TaskStop', async ($, on) => {
+  const o = { prompts: [] as string[], posts: [] as string[], notes: [] as string[] }
+  pauseRig(on as never, 'chat-stopped-1', { ...o, tokens: () => 152_000, keep: () => ({ status: 200, text: '{"onFull":"fresh"}' }) })
+  on('tool.call', () => ({ result: { message: 'stopped', task_id: 'ag7', task_type: 'local_agent' } }))
+  await $.prompt.submit({ text: 'wrap it up' })
+  await $.tool.call({ tool: 'TaskStop', task_id: 'ag7' } as never)
+  const end = () => $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 't', reason: 'answer' } as never)
+  await end()
+  await end()
+  const note = o.notes.join('')
+  expect(note).toContain('## Open tasks\n\n- stopped: ag7')
+  expect(note).toContain('agent-ag7.jsonl')
+  expect(note).toContain('- none recorded (task tools may be missing in that chat); check Subagent results and Next action')
+  expect(handoffNote({ ...FULL, tasks: [{ subject: 'Done one', status: 'completed' }] })).toContain('## Open tasks\n\n- none\n')
 })
 
 test('two handoffs at once write one note and post once', async () => {
@@ -1229,7 +1484,8 @@ const holdDouble = (o: { windows: unknown[]; pause?: unknown; id: string }) => {
   const s = { now: hb, status: [] as Array<string | undefined>, toasts: [] as string[], prompts: [] as string[], posts: [] as string[], store: {} as Record<string, unknown>, limits: { windows: o.windows, ...(o.pause ? { paused: true, pause: o.pause } : {}) } as Record<string, unknown> }
   const $ = {
     clock: { now: async () => s.now },
-    session: { id: async () => o.id },
+    session: { id: async () => o.id, cwd: async () => '/proj', usage: async () => ({ cost: o.cost === undefined ? undefined : { usd: o.cost } }) },
+    process: { run: async (argv: string[], init: { cwd?: string; timeoutMs?: number }) => { s.runs.push({ argv, init }); return o.run ? o.run(argv, init) : { exitCode: 0, stdout: '', stderr: '' } } },
     env: { get: async () => '/u' },
     store: { get: async (k: string) => s.store[k], set: async (k: string, v: unknown) => { s.store[k] = JSON.parse(JSON.stringify(v)) } },
     fs: {
@@ -1282,6 +1538,33 @@ test('an idle chat is unpaused at the reset but sent no prompt', async () => {
   expect(s.status.at(-1)).toBeUndefined()
 })
 
+test('a chat whose turn ended just before the hold started is resumed at the reset', async () => {
+  const reset = (hb += 1e9) + 3_600_000
+  const { $, s } = holdDouble({ id: 'hold-4', windows: [{ kind: 'five_hour', percentUsed: 99, resetsAt: new Date(reset).toISOString() }] })
+  // Last tool call and turn end ran before the hold: no call was ever denied.
+  await noteActive($)
+  s.now += 4 * 60_000
+  await holdTick($)
+  s.now = reset + 11_000
+  await holdTick($)
+  await holdTick($)
+  expect(s.prompts.length).toBe(1)
+  expect(s.prompts[0]).toMatch(/^Switchboard: usage limit reset\. Carry on from where you stopped/)
+  expect(s.toasts).toEqual(['Resumed: limit reset'])
+})
+
+test('a chat idle long before the limit is unpaused at the reset but sent no prompt', async () => {
+  const reset = (hb += 1e9) + 3_600_000
+  const { $, s } = holdDouble({ id: 'hold-5', windows: [{ kind: 'five_hour', percentUsed: 99, resetsAt: new Date(reset).toISOString() }] })
+  await noteActive($)
+  s.now += 30 * 60_000
+  await holdTick($)
+  s.now = reset + 11_000
+  await holdTick($)
+  expect(s.prompts).toEqual([])
+  expect(s.toasts).toEqual(['Usage limit reset: unpaused'])
+})
+
 test('Switchboard resuming first lifts the hold and the mod sends nothing more', async () => {
   const reset = (hb += 1e9) + 600_000
   const { $, s } = holdDouble({ id: 'hold-3', windows: [], pause: { kind: 'five_hour', percent: 99, resumeAt: reset, chats: [] } })
@@ -1306,4 +1589,257 @@ test('a hand resume inside the limits.json cache is not undone by the next tick'
   const holds = s.posts.map(p => JSON.parse(p)).filter(p => p.kind === 'hold').map(p => (p.hold ? 'hold' : 'lift'))
   expect(holds).toEqual(['hold', 'lift'])
   expect(await heldNow($)).toBeUndefined()
+})
+
+// pauseRig's clock is 9.95e12; this hold resets an hour later.
+const seedHold = (id: string) => ({ hold: { id, hold: { kind: 'five_hour', percent: 99, resetsAt: 9.95e12 + 3_600_000, mid: true } } })
+
+test('a held chat with open tasks is not nudged to keep working: each nudge is a paid turn the hold denies', async ($, on) => {
+  const o = { prompts: [] as string[], posts: [] as string[], notes: [] as string[] }
+  pauseRig(on as never, 'chat-held-1', { ...o, tokens: () => 40_000, keep: () => ({ status: 200, text: '{"onFull":"fresh"}' }), store: { ...seedHold('chat-held-1'), feeds: { 'chat-held-1': { tasks: [['h1', { subject: 'Wire the hook', status: 'in_progress' }]], at: 1 } } } })
+  // Tasks made before the hold: the hold denies TaskCreate itself.
+  const end = () => $.turn.complete({ answer: 'Stopping here.', durationMs: 1, isAborted: false, turnId: 't', reason: 'answer' } as never)
+  await end()
+  await end()
+  expect(o.prompts).toEqual([])
+})
+
+test('a held chat near full gets no wrap-up and no handoff until the hold lifts', async ($, on) => {
+  const o = { prompts: [] as string[], posts: [] as string[], notes: [] as string[] }
+  let now = 9.95e12
+  pauseRig(on as never, 'chat-held-2', { ...o, tokens: () => 152_000, keep: () => ({ status: 200, text: '{"onFull":"fresh"}' }), store: seedHold('chat-held-2'), now: () => now })
+  const end = () => $.turn.complete({ answer: 'Stopping here.', durationMs: 1, isAborted: false, turnId: 't', reason: 'answer' } as never)
+  await end()
+  await end()
+  expect(o.prompts).toEqual([])
+  expect(o.posts.some(p => p.includes('"kind":"handoff"'))).toBe(false)
+  // Past the reset the next settle wraps up as usual.
+  now += 3_600_001
+  await end()
+  expect(o.prompts.some(p => /clean pause/i.test(p))).toBe(true)
+})
+
+let ind = 1e12
+function indDouble(o: { id: string; flags: Record<string, unknown> | 'bad' | undefined; answer?: string; cost?: number; goal?: string; root?: string; cwd?: string; run?: (argv: string[], init: { cwd?: string; timeoutMs?: number }) => Promise<{ exitCode: number; stdout: string; stderr: string }> }) {
+  ind += 60_000
+  const s = { posts: [] as string[], runs: [] as { argv: string[]; init: { cwd?: string; timeoutMs?: number } }[], store: {} as Record<string, unknown>, now: ind }
+  const $ = {
+    clock: { now: async () => s.now },
+    session: { id: async () => o.id, cwd: async () => o.cwd ?? '/proj', ...(o.root ? { root: async () => o.root } : {}), usage: async () => ({ cost: o.cost === undefined ? undefined : { usd: o.cost } }) },
+    process: { run: async (argv: string[], init: { cwd?: string; timeoutMs?: number }) => { s.runs.push({ argv, init }); return o.run ? o.run(argv, init) : { exitCode: 0, stdout: '', stderr: '' } } },
+    env: { get: async () => '/u' },
+    store: { get: async (k: string) => s.store[k], set: async (k: string, v: unknown) => { s.store[k] = JSON.parse(JSON.stringify(v)) } },
+    fs: {
+      list: async () => [{ name: 'a-1.json', kind: 'file' }],
+      read: async (p: string) => {
+        if (p.endsWith('indefinite.json')) { if (o.flags === undefined) throw new Error('missing'); return o.flags === 'bad' ? '{nope' : JSON.stringify(o.flags) }
+        if (p.endsWith('/.switchboard/goals/' + o.id + '.md')) { if (o.goal === undefined) throw new Error('missing'); return o.goal }
+        if (p.endsWith('limits.json')) return '{}'
+        return JSON.stringify({ port: 1, workspace: '/u', hubToken: 't' })
+      },
+    },
+    http: { fetch: async (_: string, init?: { body?: string }) => { if (init?.body) s.posts.push(init.body); return { status: 204, ok: true, text: '' } } },
+  } as unknown as EngineInterface
+  return { $, s }
+}
+
+test('run indefinitely reads the flag file for this chat, missing or bad means off', async () => {
+  expect(await indefiniteOn(indDouble({ id: 'i1', flags: { i1: 5, other: 9 } }).$)).toBe(5)
+  expect(await indefiniteOn(indDouble({ id: 'i2', flags: { i1: 5 } }).$)).toBeUndefined()
+  expect(await indefiniteOn(indDouble({ id: 'i3', flags: 'bad' }).$)).toBeUndefined()
+  expect(await indefiniteOn(indDouble({ id: 'i4', flags: undefined }).$)).toBeUndefined()
+})
+
+test('run indefinitely blocks a stop until the answer ends with the done line', async () => {
+  const off = indDouble({ id: 'j0', flags: {} })
+  expect(await indefiniteStop(off.$, 'all fixed')).toBeUndefined()
+  const { $, s } = indDouble({ id: 'j1', flags: { j1: 7 } })
+  const block = await indefiniteStop($, 'fixed two bugs')
+  expect(block).toMatch(/^Run indefinitely is on\. Do another round/)
+  expect(block).toContain('Run indefinitely: done')
+  expect(block).not.toContain('\u2014')
+  expect(await indefiniteStop($, 'again')).toBeDefined()
+  expect(s.posts).toEqual([])
+  expect(await indefiniteStop($, 'Nothing left.\nRun indefinitely: done  \n')).toBeUndefined()
+  expect(s.posts.some(p => p.includes('"kind":"indefinite-done"') && p.includes('"sessionId":"j1"'))).toBe(true)
+  // the flag file may lag the hub: the chat is off for good from here
+  expect(await indefiniteDenial($, 'AskUserQuestion')).toBeUndefined()
+  expect(await indefiniteStop($, 'more')).toBeUndefined()
+})
+
+test('run indefinitely does not block while paused for a usage limit', async () => {
+  const { $, s } = indDouble({ id: 'k1', flags: { k1: 7 } })
+  s.store.hold = { id: 'k1', hold: { resetsAt: s.now + 3_600_000, percent: 99, kind: 'five_hour' } }
+  expect(await indefiniteStop($, 'stopping for the limit')).toBeUndefined()
+})
+
+test('run indefinitely denies asking after the first stop, not before', async () => {
+  const f: Record<string, number> = {}
+  const { $, s } = indDouble({ id: 'l1', flags: f })
+  f.l1 = s.now
+  // up-front round
+  expect(await indefiniteDenial($, 'AskUserQuestion')).toBeUndefined()
+  expect(await indefiniteDenial($, 'mcp__switchboard__ask')).toBeDefined()
+  await indefiniteStop($, 'round one done')
+  const why = 'Run indefinitely is on: decide yourself and say what you decided.'
+  expect(await indefiniteDenial($, 'AskUserQuestion')).toBe(why)
+  expect(await indefiniteDenial($, 'mcp__switchboard__ask')).toBe(why)
+  expect(await indefiniteDenial($, 'Bash')).toBeUndefined()
+  expect(await indefiniteDenial(indDouble({ id: 'l2', flags: {} }).$, 'AskUserQuestion')).toBeUndefined()
+})
+
+test('a handoff chat with an old flag gets no second up-front round', async () => {
+  const f: Record<string, number> = {}
+  const { $, s } = indDouble({ id: 'h1', flags: f })
+  f.h1 = s.now - 3_600_000
+  expect(await indefiniteDenial($, 'AskUserQuestion')).toBeDefined()
+})
+
+test('run indefinitely swaps the ask rule', async () => {
+  expect(await indefiniteAsk(indDouble({ id: 'm1', flags: { m1: 1 } }).$)).toMatch(/decide yourself/i)
+  expect(await indefiniteAsk(indDouble({ id: 'm2', flags: {} }).$)).toBeUndefined()
+})
+
+const doneOf = (posts: string[]) => posts.map(p => JSON.parse(p)).filter(p => p.kind === 'indefinite-done')
+
+test('run indefinitely reads the object flag shape and the plain number', async () => {
+  expect(await indefiniteOn(indDouble({ id: 'o1', flags: { o1: { onAt: 5, maxHours: 2 } } }).$)).toBe(5)
+  expect(await indefiniteOn(indDouble({ id: 'o2', flags: { o2: { maxHours: 2 } } }).$)).toBeUndefined()
+})
+
+test('a passing gate lets the stop through and says so', async () => {
+  const { $, s } = indDouble({ id: 'g1', flags: { g1: { onAt: 1e12, gate: 'pnpm test' } }, cost: 1.234 })
+  expect(await indefiniteStop($, 'round done')).toBeUndefined()
+  expect(s.runs[0].argv).toEqual(['/bin/sh', '-c', 'pnpm test'])
+  expect(s.runs[0].init).toMatchObject({ cwd: '/proj', timeoutMs: 600_000 })
+  const [d] = doneOf(s.posts)
+  expect(d.reason).toBe('gate passed: pnpm test')
+  expect(d.usage).toMatch(/^used \$1\.23 over \d+(\.\d+)?h$/)
+  expect(await indefiniteStop($, 'again')).toBeUndefined()
+})
+
+test('a failing gate output is redacted before it reaches the prompt', async () => {
+  const { $ } = indDouble({ id: 'g9', flags: { g9: { onAt: 1e12, gate: 'make check' } }, run: async () => ({ exitCode: 1, stdout: 'GITHUB_TOKEN=ghp_abcdefghijklmnopqrstuvwxyz0123456789', stderr: '' }) })
+  const block = await indefiniteStop($, 'round done')
+  expect(block).not.toContain('ghp_abcdefghijklmnopqrstuvwxyz0123456789')
+  expect(block).toContain('[removed]')
+})
+
+test('a hold does not use up the up-front ask round', async () => {
+  const f: Record<string, number> = {}
+  const { $, s } = indDouble({ id: 'q1', flags: f })
+  f.q1 = s.now
+  s.store.hold = { id: 'q1', hold: { resetsAt: s.now + 3_600_000, percent: 99, kind: 'five_hour' } }
+  expect(await indefiniteStop($, 'paused')).toBeUndefined()
+  expect(await indefiniteDenial($, 'AskUserQuestion')).toBeUndefined()
+})
+
+test('a failing gate keeps going with the last 20 lines of output', async () => {
+  const out = Array.from({ length: 30 }, (_, i) => `line ${i + 1}`).join('\n')
+  const { $, s } = indDouble({ id: 'g2', flags: { g2: { onAt: 1e12, gate: 'make check' } }, run: async () => ({ exitCode: 1, stdout: out, stderr: '' }) })
+  const block = await indefiniteStop($, 'round done')
+  expect(block).toMatch(/^Run indefinitely is on\. Do another round/)
+  expect(block).toContain('make check')
+  expect(block).toContain('line 30')
+  expect(block).toContain('line 11')
+  expect(block).not.toContain('line 10\n')
+  expect(doneOf(s.posts)).toEqual([])
+})
+
+test('a gate that cannot run or times out counts as failing', async () => {
+  const { $ } = indDouble({ id: 'g3', flags: { g3: { onAt: 1e12, gate: 'x' } }, run: async () => { throw new Error('timed out') } })
+  expect(await indefiniteStop($, 'r')).toContain('timed out')
+})
+
+test('a cost or hours cap lets the stop through as not a success', async () => {
+  const c = indDouble({ id: 'b1', flags: { b1: { onAt: 1e12, maxCostUsd: 5 } }, cost: 5.01 })
+  expect(await indefiniteStop(c.$, 'r')).toBeUndefined()
+  expect(doneOf(c.s.posts)[0].reason).toBe('budget reached (not a success)')
+  const under = indDouble({ id: 'b2', flags: { b2: { onAt: 1e12, maxCostUsd: 5 } }, cost: 1 })
+  expect(await indefiniteStop(under.$, 'r')).toBeDefined()
+  const h = indDouble({ id: 'b3', flags: { b3: { onAt: 1, maxHours: 1 } } })
+  expect(await indefiniteStop(h.$, 'r')).toBeUndefined()
+  expect(doneOf(h.s.posts)[0].reason).toBe('budget reached (not a success)')
+})
+
+test('a failing gate at the cap still stops, and the gate wins when it passes', async () => {
+  const fail = indDouble({ id: 'b4', flags: { b4: { onAt: 1e12, maxCostUsd: 1, gate: 'g' } }, cost: 2, run: async () => ({ exitCode: 2, stdout: 'no', stderr: '' }) })
+  expect(await indefiniteStop(fail.$, 'r')).toBeUndefined()
+  expect(doneOf(fail.s.posts)[0].reason).toBe('budget reached (not a success)')
+  const pass = indDouble({ id: 'b5', flags: { b5: { onAt: 1e12, maxCostUsd: 1, gate: 'g' } }, cost: 2 })
+  await indefiniteStop(pass.$, 'r')
+  expect(doneOf(pass.s.posts)[0].reason).toBe('gate passed: g')
+})
+
+test('with no limits the done line still posts a usage line and no reason', async () => {
+  const { $, s } = indDouble({ id: 'u1', flags: { u1: 1e12 }, cost: 2 })
+  expect(await indefiniteStop($, 'r')).toBeDefined()
+  expect(s.runs).toEqual([])
+  await indefiniteStop($, 'x\nRun indefinitely: done')
+  const [d] = doneOf(s.posts)
+  expect(d.reason).toBeUndefined()
+  expect(d.usage).toContain('used $2.00')
+})
+
+test('a /goal file steers each round at the goal and its check is the gate', async () => {
+  const goal = '# Goal\n\nLogin works.\n\nCheck: `pnpm test auth`\n'
+  const { $, s } = indDouble({ id: 'q1', flags: { q1: 7 }, goal, run: async () => ({ exitCode: 1, stdout: 'auth failed', stderr: '' }) })
+  const block = await indefiniteStop($, 'round one')
+  expect(block).toContain('/proj/.switchboard/goals/q1.md')
+  expect(block).toContain('Run indefinitely: done')
+  expect(block).not.toMatch(/audit the project/)
+  expect(block).toContain('auth failed')
+  expect(s.runs[0].argv).toEqual(['/bin/sh', '-c', 'pnpm test auth'])
+})
+
+test('a goal check passing ends the run; the hub gate still wins over it', async () => {
+  const ok = indDouble({ id: 'q2', flags: { q2: 7 }, goal: 'Check: `make check`' })
+  expect(await indefiniteStop(ok.$, 'done?')).toBeUndefined()
+  expect(doneOf(ok.s.posts)[0].reason).toBe('gate passed: make check')
+  const hub = indDouble({ id: 'q3', flags: { q3: { onAt: 7, gate: 'pnpm test' } }, goal: 'Check: `make check`' })
+  await indefiniteStop(hub.$, 'done?')
+  expect(hub.s.runs[0].argv[2]).toBe('pnpm test')
+})
+
+test('a goal with no check keeps the done line as the only way out', async () => {
+  const { $, s } = indDouble({ id: 'q4', flags: { q4: 7 }, goal: 'Just make it fast.' })
+  expect(await indefiniteStop($, 'faster')).toContain('goals/q4.md')
+  expect(s.runs).toEqual([])
+})
+
+test('a chat in a subfolder finds the goal at the project root and runs its Check there', async () => {
+  const { $, s } = indDouble({ id: 'q5', flags: { q5: 7 }, root: '/proj', cwd: '/proj/web', goal: 'Check: `make check`', run: async () => ({ exitCode: 1, stdout: 'no', stderr: '' }) })
+  expect(await indefiniteStop($, 'round')).toContain('/proj/.switchboard/goals/q5.md')
+  expect(s.runs[0].init.cwd).toBe('/proj')
+})
+
+test('the done line cannot end a goal run while its Check fails', async () => {
+  const bad = indDouble({ id: 'q6', flags: { q6: 7 }, goal: 'Check: `make check`', run: async () => ({ exitCode: 1, stdout: 'still broken', stderr: '' }) })
+  const block = await indefiniteStop(bad.$, 'All good.\nRun indefinitely: done')
+  expect(block).toContain('still broken')
+  expect(doneOf(bad.s.posts)).toEqual([])
+  const ok = indDouble({ id: 'q7', flags: { q7: 7 }, goal: 'Check: `make check`' })
+  expect(await indefiniteStop(ok.$, 'Run indefinitely: done')).toBeUndefined()
+  expect(doneOf(ok.s.posts).length).toBe(1)
+})
+
+test('a fresh chat takes over the goal of the chat that handed off to it', async () => {
+  const files: Record<string, string> = { '/proj/.switchboard/goals/abcd1234-old.md': 'Check: `make check`' }
+  const $ = {
+    session: { id: async () => 'new-id', cwd: async () => '/proj/web', root: async () => '/proj' },
+    fs: {
+      list: async () => [{ name: 'abcd1234-old.md', kind: 'file' }, { name: 'zzzz.md', kind: 'file' }],
+      read: async (p: string) => { if (p in files) return files[p]; throw new Error('missing') },
+      write: async (p: string, v: string) => { files[p] = v },
+    },
+  } as unknown as EngineInterface
+  expect(await carryGoal($, '/u/.claude/handoffs/proj/2026-11-14-1200-proj-x-abcd1234.md')).toBe('/proj/.switchboard/goals/new-id.md')
+  expect(files['/proj/.switchboard/goals/new-id.md']).toBe('Check: `make check`')
+  expect(await carryGoal($, '/u/.claude/handoffs/proj/note-ffff0000.md')).toBeUndefined()
+})
+
+test('the ask rule under Run indefinitely asks everything up front, then decides', async () => {
+  const rule = await indefiniteAsk(indDouble({ id: 'm3', flags: { m3: 1 } }).$)
+  expect(rule).toMatch(/one AskUserQuestion round/)
+  expect(rule).toMatch(/after that, decide yourself/i)
 })

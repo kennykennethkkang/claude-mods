@@ -3,17 +3,19 @@
 //   node kit/setup.mjs             marketplaces, plugins, mods, skills, Jev presets, role subagents, settings, Switchboard
 //   node kit/setup.mjs --dry-run   list those steps without running them
 //   node kit/setup.mjs --export    write manifest.json, skills, presets and role subagents from this machine
-//   node kit/setup.mjs --rules-only        only install kit/rules.md as ~/.claude/CLAUDE.md and ~/.codex/AGENTS.md
+//   node kit/setup.mjs --rules-only        only install kit/rules.md and kit/rules/*.md as ~/.claude/CLAUDE.md and ~/.codex/AGENTS.md (and ~/.claude/rules)
 //   node kit/setup.mjs --agents-only       only install kit/agents/*.md into ~/.claude/agents, and as Codex roles with ecc-agents
+//   node kit/setup.mjs --codex-hooks-only  only copy kit/codex-hooks.mjs to ~/.codex/switchboard-guard and add it to ~/.codex/hooks.json (PreToolUse guards, PostToolUse record, Stop hold)
 //   node kit/setup.mjs --permissions-only  only set bypass mode and the deny list in ~/.claude/settings.json
 //   node kit/setup.mjs --rc-only           only install the Remote Control login item (macOS LaunchAgent, Windows Startup)
 // macOS, Linux and Windows, Node 20 or later. Keys and sign-ins never travel in the kit.
 import { spawnSync } from 'node:child_process'
 import { copyFileSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import * as nodeModule from 'node:module'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { CODEX_AGENT_HEADER, codexAgent, exportManifest, isSecretFile, keyLine, launchAgent, mergeSettings, newestVsix, planSetup, RC_LABEL, rcLogin, RULES_HEADER, rulesAction, rulesTargets, startupFile, startupVbs, withDeny } from './kit.mjs'
+import { CODEX_AGENT_HEADER, codexAgent, codexGuardFiles, codexRoleNames, mergeCodexHooks, exportManifest, exportSkills, isSecretFile, keyLine, launchAgent, mergeSettings, newestVsix, pathRules, PATH_RULE_MARK, planSetup, RC_LABEL, rcLogin, RULES_HEADER, rulesAction, rulesTargets, withPathRules, startupFile, startupVbs, withDeny } from './kit.mjs'
 
 const KIT = dirname(fileURLToPath(import.meta.url))
 const CLAUDE = join(homedir(), '.claude')
@@ -23,6 +25,7 @@ const readJson = (p, fallback) => { try { return JSON.parse(readFileSync(p, 'utf
 // The first backup is the one worth keeping: a later run would only copy the kit's own output over it.
 const backupOnce = path => { if (existsSync(path) && !existsSync(`${path}.before-kit`)) { copyFileSync(path, `${path}.before-kit`); console.log(`> kept the old ${path} as ${path}.before-kit`) } }
 const list = dir => (existsSync(dir) ? readdirSync(dir).filter(n => !n.startsWith('.')) : [])
+const listDirs = dir => list(dir).filter(n => statSync(join(dir, n)).isDirectory())
 
 /** Copies a folder without secret-looking files; collects what it left behind. */
 function copyClean(from, to, skipped) {
@@ -51,10 +54,10 @@ function exportKit() {
     agents: list(join(CLAUDE, 'agents')),
   })
   const skipped = []
-  for (const [dir, names] of [['skills', m.skills], ['skills-archive', m.skillsArchived]]) {
-    rmSync(join(KIT, dir), { recursive: true, force: true })
-    for (const n of names) copyClean(join(CLAUDE, dir, n), join(KIT, dir, n), skipped)
-  }
+  const { copy, kept } = exportSkills(m.skills, listDirs(join(KIT, 'skills')))
+  for (const n of copy) copyClean(join(CLAUDE, 'skills', n), join(KIT, 'skills', n), skipped)
+  rmSync(join(KIT, 'skills-archive'), { recursive: true, force: true })
+  for (const n of m.skillsArchived) copyClean(join(CLAUDE, 'skills-archive', n), join(KIT, 'skills-archive', n), skipped)
   for (const [dir, names] of [['jev-presets', m.jevPresets], ['agents', m.agents]]) {
     rmSync(join(KIT, dir), { recursive: true, force: true })
     mkdirSync(join(KIT, dir), { recursive: true })
@@ -66,6 +69,7 @@ function exportKit() {
   }
   writeFileSync(join(KIT, 'manifest.json'), `${JSON.stringify(m, null, 2)}\n`)
   console.log(`Kit written: ${Object.keys(m.plugins).length} plugins, ${m.skills.length} skills (${m.skillsArchived.length} archived), ${m.jevPresets.length} Jev presets, ${m.agents.length} subagents, ${Object.keys(m.settings).length} settings.`)
+  if (kept.length) console.log(`Kept kit/skills as is for ${kept.join(', ')}: edit those in the kit, setup installs them.`)
   if (skipped.length) console.log(`Left behind because they look like secrets:\n  ${skipped.join('\n  ')}`)
 }
 
@@ -83,7 +87,7 @@ function setup(dry) {
     process.exit(1)
   }
   const vsix = newestVsix(list(KIT))
-  const steps = planSetup(m, { kit: KIT.replace(/\\/g, '/'), vsix })
+  const steps = planSetup(m, { kit: KIT.replace(/\\/g, '/'), vsix, kitSkills: listDirs(join(KIT, 'skills')) })
   if (!dry && !run('claude', ['--version'])) {
     console.error('Install Claude Code first (https://claude.com/claude-code), sign in, then run this again.')
     process.exit(1)
@@ -113,6 +117,7 @@ function setup(dry) {
   if (login) console.log(`> Remote Control at login: ${login}`)
   if (dry) return
   installRules()
+  installCodexHooks()
   installRc()
   if (failed.length) console.log(`\nDid not finish, try these again by hand:\n  ${failed.join('\n  ')}`)
   if (!vsix) console.log('\nNo Switchboard .vsix in the kit: package it on the Mac (see the README) and run this again.')
@@ -131,14 +136,41 @@ const keychainHas = name => process.platform === 'darwin'
   ? spawnSync('security', ['find-generic-password', '-s', 'switchboard', '-a', name], { stdio: 'ignore' }).status === 0
   : existsSync(join(homedir(), '.claude', 'switchboard', 'keys', name))
 
+/** kit/rules/*.md to ~/.claude/rules/switchboard-*.md; unmarked files are the user's and stay, marked leftovers go. */
+function installPathRules(prules) {
+  const claude = join(homedir(), '.claude')
+  if (!existsSync(claude)) return
+  const rdir = join(claude, 'rules')
+  for (const r of prules) {
+    const dest = join(rdir, r.name), mine = existsSync(dest) ? readFileSync(dest, 'utf8') : undefined
+    if (mine === r.installed) continue
+    if (mine !== undefined && !mine.includes(PATH_RULE_MARK)) { console.log(`> skip ${dest}: yours`); continue }
+    mkdirSync(rdir, { recursive: true })
+    writeFileSync(dest, r.installed)
+    console.log(`> rule written to ${dest}`)
+  }
+  const keep = new Set(prules.map(r => r.name))
+  for (const n of existsSync(rdir) ? readdirSync(rdir) : []) {
+    if (!n.startsWith('switchboard-') || !n.endsWith('.md') || keep.has(n)) continue
+    if (readFileSync(join(rdir, n), 'utf8').includes(PATH_RULE_MARK)) { rmSync(join(rdir, n)); console.log(`> removed ${join(rdir, n)}`) }
+  }
+}
+
 /** kit/rules.md to every agent that is installed; a hand-written file is kept as .before-kit first. */
 function installRules() {
   const rules = readFileSync(join(KIT, 'rules.md'), 'utf8')
-  const version = `${statSync(join(KIT, 'rules.md')).mtime.toISOString().slice(0, 19)}Z`
-  for (const t of rulesTargets(homedir(), rules, version)) {
+  const rdir = join(KIT, 'rules')
+  const names = existsSync(rdir) ? readdirSync(rdir) : []
+  const prules = pathRules(names.map(n => [n, readFileSync(join(rdir, n), 'utf8')]))
+  const newest = Math.max(...['rules.md', ...prules.map(r => `rules/${r.name.slice('switchboard-'.length)}`)].map(n => statSync(join(KIT, n)).mtimeMs))
+  const version = `${new Date(newest).toISOString().slice(0, 19)}Z`
+  const [claude] = rulesTargets(homedir(), rules, version)
+  const [, codex] = rulesTargets(homedir(), withPathRules(rules, prules), version)
+  installPathRules(prules)
+  for (const t of [claude, codex]) {
     if (!existsSync(dirname(t.path))) { console.log(`> skip ${t.path}: not installed`); continue }
     const existing = existsSync(t.path) ? readFileSync(t.path, 'utf8') : undefined
-    if (rulesAction(existing, rules, version) === 'skip') { console.log(`> skip ${t.path}: newer rules already there`); continue }
+    if (rulesAction(existing, rules, version, t.tail) === 'skip') { console.log(`> skip ${t.path}: newer rules already there`); continue }
     if (existing !== undefined && !existing.startsWith(RULES_HEADER)) backupOnce(t.path)
     writeFileSync(t.path, t.text)
     console.log(`> rules written to ${t.path}`)
@@ -165,9 +197,14 @@ function installAgents(names, dry) {
 function installCodexAgents(names) {
   if (!existsSync(CODEX)) { console.log(`> skip Codex roles: ${CODEX} not installed`); return }
   const ecc = join(KIT, '..', 'ecc-agents', 'agents')
-  const srcs = [...names.map(n => [join(KIT, 'agents', n), '']), ...list(ecc).filter(n => n.endsWith('.md')).map(n => [join(ecc, n), 'ecc-'])]
+  const srcs = [...codexRoleNames(names).map(n => [join(KIT, 'agents', n), '']), ...list(ecc).filter(n => n.endsWith('.md')).map(n => [join(ecc, n), 'ecc-'])]
   const dir = join(CODEX, 'agents')
   mkdirSync(dir, { recursive: true })
+  // Copies an older setup wrote for the -codex roles go; a hand-made one stays.
+  for (const n of names.filter(n => !codexRoleNames([n]).length)) {
+    const old = join(dir, `${n.replace(/\.md$/, '')}.toml`)
+    if (existsSync(old) && readFileSync(old, 'utf8').startsWith(CODEX_AGENT_HEADER)) { rmSync(old); console.log(`> removed ${old}`) }
+  }
   let n = 0
   for (const [src, prefix] of srcs) {
     const toml = existsSync(src) && codexAgent(readFileSync(src, 'utf8'), prefix)
@@ -179,6 +216,29 @@ function installCodexAgents(names) {
     n++
   }
   console.log(`> wrote ${n} Codex roles into ${dir}`)
+}
+
+/** codex-hooks.mjs on Codex's PreToolUse, PostToolUse and Stop, beside the hooks Switchboard wrote there. */
+function installCodexHooks() {
+  if (!existsSync(CODEX)) { console.log(`> skip Codex hooks: ${CODEX} not installed`); return }
+  const path = join(CODEX, 'hooks.json')
+  const node = spawnSync('/bin/sh', ['-c', 'command -v node'], { encoding: 'utf8' }).stdout?.trim() || process.execPath
+  const cfg = readJson(path, undefined)
+  if (existsSync(path) && !cfg) { console.log(`> skip Codex hooks: ${path} does not parse`); return }
+  // A plain JS copy outside the repo: runs on any Node and survives the repo moving.
+  // source.json lets the copy rebuild itself when the repo's files are newer.
+  if (!nodeModule.stripTypeScriptTypes) { console.log(`> skip Codex hooks: setup needs Node 22.13 or later to build them, found ${process.version}`); return }
+  const guard = join(CODEX, 'switchboard-guard')
+  for (const [rel, text] of codexGuardFiles(r => readFileSync(join(KIT, '..', r), 'utf8'), nodeModule.stripTypeScriptTypes)) {
+    mkdirSync(dirname(join(guard, rel)), { recursive: true })
+    writeFileSync(join(guard, rel), text)
+  }
+  writeFileSync(join(guard, 'source.json'), `${JSON.stringify({ root: join(KIT, '..') })}\n`)
+  const next = mergeCodexHooks(cfg ?? {}, `"${node}" "${join(guard, 'codex-hooks.mjs')}"`)
+  backupOnce(path)
+  writeFileSync(path, `${JSON.stringify(next, null, 2)}\n`)
+  JSON.parse(readFileSync(path, 'utf8'))
+  console.log(`> Codex guard hooks in ${path}`)
 }
 
 /** Bypass mode and the deny list, for when only permissions should change. */
@@ -219,6 +279,7 @@ function installRcWindows() {
 
 if (flags.has('--export')) exportKit()
 else if (flags.has('--rules-only')) installRules()
+else if (flags.has('--codex-hooks-only')) installCodexHooks()
 else if (flags.has('--agents-only')) installAgents(readJson(join(KIT, 'manifest.json'), {}).agents ?? [], false)
 else if (flags.has('--permissions-only')) applyPermissions()
 else if (flags.has('--rc-only')) installRc()

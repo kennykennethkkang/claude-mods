@@ -1,0 +1,49 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>settings</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="page">
+  <div class="title">SETTINGS</div>
+  <h4>User Profile</h4>
+  <table>
+    <tr>
+      <td><input id="name" placeholder="Name"></td>
+      <td><input id="email" type="email" placeholder="E-mail address"></td>
+    </tr>
+    <tr>
+      <td><label>Timezone</label></td>
+      <td>
+        <select id="tz">
+          <option>UTC</option>
+          <option>America/New_York</option>
+          <option>Europe/Berlin</option>
+          <option>Asia/Tokyo</option>
+        </select>
+      </td>
+    </tr>
+  </table>
+
+  <h4>Notification Settings</h4>
+  <div class="row"><input type="checkbox" id="digest"> Weekly Digest</div>
+  <div class="row"><input type="checkbox" id="mentions"> Mention Alerts</div>
+
+  <h6>Look &amp; Feel</h6>
+  <div class="row">
+    <input type="radio" name="theme" value="system" checked> Auto
+    <input type="radio" name="theme" value="light"> Light
+    <input type="radio" name="theme" value="dark"> Dark
+  </div>
+
+  <button id="save" class="btn">Submit</button>
+  <span id="status"></span>
+
+  <hr>
+  <button id="delete" style="background:#ff0000;color:white;border:0;padding:4px 8px">Remove account</button>
+</div>
+<script src="app.js"></script>
+</body>
+</html>

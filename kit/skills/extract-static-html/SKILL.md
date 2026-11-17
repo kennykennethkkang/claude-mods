@@ -7,6 +7,7 @@ allowed-tools:
   - "Read"
   - "Write"
   - "web_fetch"
+  - "WebFetch"
 ---
 
 # Extract Static HTML
@@ -23,7 +24,7 @@ You MUST ask the user to choose which strategy to use before proceeding. Present
 | **Fidelity** | **Highest — computed styles resolved** | High — rendered DOM |
 | **Setup** | **Zero — no mock needed** | Zero — no mock needed |
 | **Framework** | **Any** | Any |
-| **Output** | **Writes to file — no size limit** | May truncate in agent context |
+| **Output** | **Writes to file, not the agent context (viewport capped at 7680x4320)** | May truncate in agent context |
 
 > [!WARNING]
 > **Checkpoint — User Confirmation Required.**
@@ -121,7 +122,7 @@ Launches headless Chrome, captures the fully rendered DOM, and produces a self-c
 | :--- | :--- |
 | Images missing | Increase `--wait` |
 | Images show as broken after server stops | Verify `srcset` was inlined — check log for "Inlined N images". If `srcset` URLs failed, they are auto-removed so `src` (inlined) is used. |
-| Icons display as text / Serif unstyled font | Ensure `snapshot.ts` captures CSSOM from `document.styleSheets` (step 0) and same-origin icon fonts (`@font-face`) are inlined as base64 data URIs. |
+| Icons display as text / Serif unstyled font | Ensure `scripts/snapshot.ts` captures CSSOM from `document.styleSheets` (step 0) and same-origin icon fonts (`@font-face`) are inlined as base64 data URIs. |
 | Next.js `/_next/image` not inlined | Ensure the dev server is running when snapshot runs — the script fetches optimized images from the running server. |
 | Dark mode not applied | `--html-class dark` |
 | Cookie banner in output | `--remove-fixed` |

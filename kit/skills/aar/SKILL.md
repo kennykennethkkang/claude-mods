@@ -41,9 +41,15 @@ Push a vague lesson until it is concrete, or drop it. Zero lessons is fine; do n
 
 ## Where it goes
 
-1. **Memory**, one file per lesson, in this project's memory folder (`~/.claude/projects/<project slug>/memory/`). Read `MEMORY.md` there first; if a memory already covers it, update that file instead of adding one. Run `hub_recall` for the topic first. If the lesson replaces an older one, write the new note with `supersedes: <old-slug>` rather than duplicating or rewriting it; use `contradicts:` if unresolved, and add `related:` or `depends-on:` where they fit. New file: frontmatter with `name`, `description`, `metadata.type: feedback`; body is the rule, then `**Why:**` (what happened in this chat) and `**How to apply:**`. Add a one-line entry to `MEMORY.md`.
+1. **Memory**, one file per lesson, in this project's memory folder (`~/.claude/projects/<project slug>/memory/`). Read `MEMORY.md` there first; if a memory already covers it, update that file instead of adding one. Run `hub_recall` for the topic first. If the lesson replaces an older one, write the new note with `supersedes: <old-slug>`, then move the old file unedited to `memory/archive/` and drop its `MEMORY.md` line; use `contradicts:` if unresolved, and add `related:` or `depends-on:` where they fit. Link only to notes or wiki pages that exist (skills and tools in backticks), and give every new note at least one link. New file: frontmatter with `name`, `description`, `metadata.type: feedback`; body is the rule, then `**Why:**` (what happened in this chat) and `**How to apply:**`. Add a one-line entry to `MEMORY.md`.
 2. **Vault**: append the whole AAR (date, chat, four answers, lessons) to `~/Documents/vault/wiki/aar-<project>.md`. Follow `~/Documents/vault/README.md`: if the page is new, add `- [[aar-<project>]] ...` to `wiki/index.md`; append a dated line to `wiki/log.md` either way. Link memory files by `[[name]]`.
 3. **Skill or rule changes are never applied.** If the next chat will repeat the mistake unless something it loads changes, write a fix plan: exact target file and exact text to add or replace. File it with `mcp__switchboard__todo_add` for Kenneth to approve. Kit rules, skills, agents and mods live in `claude-mods` (`kit/rules.md`, `kit/skills/<name>/SKILL.md`, `kit/agents/<role>.md`), never the copies in `~/.claude` or `switchboard/extension/kit`.
+
+Before you edit or archive any memory note, `MEMORY.md`, or a kit, rules or agent file, save an undo point: `node ~/.claude/skills/aar/scripts/snapshot.mjs save "aar <chat name>" <the files>`. The hub History lists it with an Undo button; `snapshot.mjs list` and `restore <id>` do the same by hand.
+
+Then run `node ~/.claude/skills/aar/scripts/memory-health.mjs` (from this skill's `scripts/`) and if it lists anything, run the `memory-fix` skill instead of fixing by hand; clear the list before the standup.
+
+Before you merge, rewrite or archive existing notes, save a recall run: `node ~/.claude/skills/aar/scripts/memory-gold.mjs --save "$TMPDIR/gold-before.json"`. After, run it again with `--base "$TMPDIR/gold-before.json"` and undo any change that loses a hit. It scores the queries in `~/.claude/memory-gold.json` (`q`, `expect` slugs); add one when a lesson names a note chats should find.
 
 Not every lesson needs a fix plan. Context only goes to memory and the vault.
 

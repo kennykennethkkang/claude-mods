@@ -40,3 +40,22 @@ test('other tools pass with phone on', async ($, on) => {
   const ran = await $.tool.call({ tool: 'Bash', command: 'ls' } as never)
   expect(JSON.stringify(ran)).not.toMatch(/call\.py/)
 })
+
+test('phone on lets the closing Approve question through', async ($, on) => {
+  rig(on, true)
+  const close = { questions: [{ question: 'Approve this chat as finished?', header: 'Approve', options: [{ label: 'Approve' }, { label: 'Send back' }] }] }
+  const ran = await $.tool.call({ tool: 'AskUserQuestion', ...close } as never)
+  expect(JSON.stringify(ran)).not.toMatch(/call\.py/)
+})
+
+test('a chat in Run indefinitely skips the call so usage-meter decides', async ($, on) => {
+  const h = on as (op: string, fn: (_: unknown, e: Record<string, any>) => unknown) => void
+  now += 60_000
+  h('env.get', () => ({ value: '/u' }))
+  h('clock.now', () => ({ value: now }))
+  h('session.id', () => ({ value: 's1' }))
+  h('fs.read', (_, e) => ({ value: String(e.path).endsWith('limits.json') ? JSON.stringify({ phone: true }) : String(e.path).endsWith('indefinite.json') ? JSON.stringify({ s1: 1 }) : '' }))
+  h('tool.call', () => ({ result: 'asked' }))
+  const ran = await $.tool.call({ tool: 'AskUserQuestion', ...ASK } as never)
+  expect(JSON.stringify(ran)).not.toMatch(/call\.py/)
+})

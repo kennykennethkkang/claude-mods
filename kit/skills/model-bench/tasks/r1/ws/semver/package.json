@@ -1,0 +1,1 @@
+{ "name": "tiny-semver", "private": true, "type": "module", "scripts": { "test": "node --test" } }

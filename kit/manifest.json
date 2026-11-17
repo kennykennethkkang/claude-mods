@@ -19,10 +19,6 @@
       "source": "github",
       "repo": "anthropics/claude-plugins-official"
     },
-    "google-labs-code-stitch-skills": {
-      "source": "github",
-      "repo": "google-labs-code/stitch-skills"
-    },
     "ponytail": {
       "source": "github",
       "repo": "DietrichGebert/ponytail"
@@ -63,9 +59,6 @@
     "security-guidance@claude-code-plugins": false,
     "context7@claude-plugins-official": true,
     "playwright@claude-plugins-official": true,
-    "stitch-build@google-labs-code-stitch-skills": true,
-    "stitch-design@google-labs-code-stitch-skills": true,
-    "stitch-utilities@google-labs-code-stitch-skills": true,
     "auth0@claude-plugins-official": true,
     "aws-core@claude-plugins-official": true,
     "ponytail@ponytail": true,
@@ -78,6 +71,7 @@
     "bash-approve@kenneth-mods": true,
     "chat-wait@kenneth-mods": true,
     "phone-mode@kenneth-mods": true,
+    "todo-band@kenneth-mods": true,
     "marketing-skills@marketingskills": true,
     "codex@openai-codex": true
   },
@@ -132,6 +126,8 @@
     "animation-styles",
     "claude-x-jev",
     "click-path-audit",
+    "crowd-ab",
+    "deep-research",
     "e2e-testing",
     "extract-design-md",
     "extract-static-html",
@@ -144,8 +140,10 @@
     "page-transitions",
     "phone",
     "scroll-animations",
+    "self-improve",
     "skill-inspector",
     "taste-design",
+    "toolchain",
     "web-design-guidelines"
   ],
   "skillsArchived": [

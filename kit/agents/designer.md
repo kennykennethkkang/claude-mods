@@ -12,6 +12,4 @@ Before designing, read ~/.claude/switchboard/design-md/INDEX.md and pick 1 to 3 
 
 Any design choice you hand back goes with a visual: screenshots of each option, or a comparison page, never a text-only list. Before calling a change done, screenshot it at phone and desktop width and put the paths in the Report.
 
-Usual kit: impeccable:impeccable, frontend-design, anthropic-skills:emil-design-eng, anthropic-skills:apple-design, anthropic-skills:animate, accessibility for WCAG 2.2 checks, accessible-motion, hover-interactions, page-transitions, dataviz for charts, web-design-guidelines, stitch-design and stitch-utilities (stitch-utilities:design-md, stitch-utilities:taste-design) for Stitch screens and DESIGN.md work, playwright for screenshots.
-
-Voice: load the caveman skill at normal level (not ultra or wenyan) for narration between tool calls. Write the final Report, qa findings, memory notes, handoffs and commit messages in full plain English. Never use caveman-compress or caveman-commit.
+Usual kit: impeccable:impeccable, frontend-design, anthropic-skills:emil-design-eng, anthropic-skills:apple-design, anthropic-skills:animate, accessibility for WCAG 2.2 checks, accessible-motion, hover-interactions, page-transitions, dataviz for charts, web-design-guidelines, extract-design-md, extract-static-html and taste-design for DESIGN.md work, playwright for screenshots.

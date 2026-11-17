@@ -81,8 +81,8 @@ export const DEFAULTS: Record<string, Rule> = {
   aws: { mode: 'ask' }, stitch: { mode: 'ask' },
 }
 // Per call guess in USD, high on purpose: a Gemini call with an image or long context runs a few cents, so 5c each.
-const ESTIMATE: Record<string, number> = { gemini: 0.05 }
-const FLOOR = 1
+export const ESTIMATE: Record<string, number> = { gemini: 0.05 }
+export const FLOOR = 1
 
 type SpendFile = { month: string; keys: Record<string, { calls: number; usd: number }> }
 const month = () => new Date().toISOString().slice(0, 7)
@@ -99,7 +99,7 @@ export function ruleOf(policy: unknown, key: string): Rule {
   return { mode: r.mode, monthlyUsd: typeof r.monthlyUsd === 'number' && r.monthlyUsd >= 0 ? r.monthlyUsd : base.monthlyUsd ?? 5 }
 }
 
-const thisMonth = (f: unknown): SpendFile => (isObj(f) && f.month === month() && isObj(f.keys) ? f as SpendFile : { month: month(), keys: {} })
+export const thisMonth = (f: unknown): SpendFile => (isObj(f) && f.month === month() && isObj(f.keys) ? f as SpendFile : { month: month(), keys: {} })
 
 // ponytail: read then write, so two chats spending at the same instant can drop one count; a lock if that ever matters.
 async function record($: EngineInterface, dir: string, key: string) {
@@ -122,7 +122,7 @@ type Cap = { capped: true; left?: number } | { capped: false; why: string }
 // Live checks of a hard limit set on the provider's own site. Providers missing here expose no cap over their API.
 type Check = { url: string; read: (j: any) => Cap }
 // `next`: asked only when the first check confirms no cap.
-const CHECKS: Record<string, Check & { env: string; auth: (key: string) => Record<string, string>; next?: Check }> = {
+export const CHECKS: Record<string, Check & { env: string; auth: (key: string) => Record<string, string>; next?: Check }> = {
   openrouter: {
     env: 'OPENROUTER_API_KEY', url: 'https://openrouter.ai/api/v1/key', auth: k => ({ Authorization: `Bearer ${k}` }),
     read: j => typeof j?.data?.limit !== 'number' || typeof j.data.limit_remaining !== 'number'

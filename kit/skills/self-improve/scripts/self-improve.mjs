@@ -57,6 +57,11 @@ export function decide(base, cand, margin = 0.1) {
     return { ...out, accept: true, why: `same pass rate, cost ${out.baseCost.toFixed(3)} -> ${out.candCost.toFixed(3)}` }
   return { ...out, accept: false, why: `no margin: ${pc(rb)} -> ${pc(rc)} (need +${pc(margin)})` }
 }
+// judge reply -> pass array, or null when it is missing, malformed or the wrong length
+export function parsePass(text, n) {
+  const m = (text || '').match(/\{[\s\S]*\}/)
+  try { const p = m && JSON.parse(m[0]).pass; return Array.isArray(p) && p.length === n ? p.map(Boolean) : null } catch { return null }
+}
 const pc = x => (100 * x).toFixed(0) + '%'
 
 export function loadTasks(target) {
@@ -148,10 +153,13 @@ async function main() {
   const judgeTpl = fs.readFileSync(path.join(EVALS, 'judge.md'), 'utf8')
   const judged = await pairs(outs, async o => {
     const prompt = judgeTpl.replace('{{task}}', o.t.prompt).replace('{{output}}', o.result).replace('{{checklist}}', o.t.checklist.map((c, i) => `${i + 1}. ${c}`).join('\n'))
-    const j = await claude(['--model', 'sonnet', '--max-turns', '1'], fs.mkdtempSync(path.join(os.tmpdir(), 'si-judge-')), a.budget, prompt)
-    const m = (j.result || '').match(/\{[\s\S]*\}/)
-    const pass = m ? JSON.parse(m[0]).pass.map(Boolean) : o.t.checklist.map(() => false)
-    return { ...o, pass }
+    // a short pass array once read a missing slot as a regression; retry, then fail the run
+    for (let k = 0; k < 3; k++) {
+      const j = await claude(['--model', 'sonnet', '--max-turns', '1'], fs.mkdtempSync(path.join(os.tmpdir(), 'si-judge-')), a.budget, prompt)
+      const pass = parsePass(j.result, o.t.checklist.length)
+      if (pass) return { ...o, pass }
+    }
+    throw new Error(`judge gave no ${o.t.checklist.length}-item verdict for ${o.t.id} ${o.side}`)
   })
   const side = s => Object.fromEntries(judged.filter(o => o.side === s).map(o => [o.t.id, { pass: o.pass, turns: o.turns, cost: o.cost }]))
   const verdict = { ...decide(side('baseline'), side('candidate'), a.margin), spent }

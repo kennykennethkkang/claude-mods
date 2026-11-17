@@ -1,0 +1,9 @@
+{
+  "name": "todo-band",
+  "version": "0.1.0",
+  "description": "Shows a one-line band above the prompt when Switchboard started the chat on a to-do item: which one, whether it ran on its own, and where it came from",
+  "author": {
+    "name": "Kenneth Kang"
+  },
+  "license": "MIT"
+}

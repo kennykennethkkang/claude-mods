@@ -1,0 +1,42 @@
+body {
+  font-family: Arial, sans-serif;
+  font-size: 11px;
+  background: #fafafa;
+  color: #333;
+  margin: 0;
+}
+.page {
+  width: 720px;
+  margin: 40px auto;
+  padding: 13px;
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 12px;
+}
+.title {
+  font-size: 30px;
+  font-weight: bold;
+  color: #111;
+}
+h4, h6 { color: #3b82f6; margin: 18px 0 6px; }
+table { width: 100%; }
+input, select {
+  border: 1px solid #ccc;
+  padding: 3px;
+  outline: none;
+  border-radius: 12px;
+}
+input:focus, select:focus { border-color: #3b82f6; }
+input[type="checkbox"], input[type="radio"] { width: 12px; height: 12px; }
+.row { padding: 5px 0; }
+.btn {
+  background: #3b82f6;
+  color: #fff;
+  border: none;
+  padding: 5px 9px;
+  border-radius: 20px;
+  transition: all .3s;
+}
+.btn:hover { background: #2563eb; transform: scale(1.05); }
+#status { color: green; margin-left: 10px; }
+hr { border: 0; border-top: 1px solid #eee; margin: 22px 0; }

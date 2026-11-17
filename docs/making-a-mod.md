@@ -40,8 +40,8 @@ Start a new chat to load it. Turn it off with `claude plugin disable my-mod@kenn
 
 Only when it should go to other machines through Set up:
 
-1. Add the name to `"mods"` in `agent-flow/extension/kit/setup.json`.
-2. Build the extension (`cd agent-flow/extension && pnpm build`). `esbuild.js` copies the mod and the marketplace file into `extension/kit/mods`; do not edit that copy by hand.
+1. Add the name to `"mods"` in `switchboard/extension/kit/setup.json`.
+2. Build the extension (`cd switchboard/extension && pnpm build`). `esbuild.js` copies the mod and the marketplace file into `extension/kit/mods`; do not edit that copy by hand.
 3. Set up on a fresh machine installs it as `my-mod@kenneth-mods` from the bundled copy.
 
 ## Rules that bite

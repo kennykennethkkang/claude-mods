@@ -1,0 +1,498 @@
+{
+  "date": "2026-11-10T20:37:43.923Z",
+  "level": "standard",
+  "models": {
+    "arms": "sonnet",
+    "judges": [
+      "sonnet"
+    ]
+  },
+  "claims": "all",
+  "note": "q26 to q44 came from a run killed by its 2h timer before it saved, so those rows are the numbers it printed, without answers. q45 to q47 (and a q27 recheck) are from results-round4b.json, which keeps answers. q27 is scored correct for both arms after its gold was fixed to the 8 November capture.",
+  "summary": {
+    "baseline": {
+      "n": 22,
+      "correct": 22,
+      "gold": 21,
+      "supported": 114,
+      "cited": 121,
+      "cost": 3.588,
+      "citation": 0.942
+    },
+    "new": {
+      "n": 22,
+      "correct": 22,
+      "gold": 22,
+      "supported": 140,
+      "cited": 148,
+      "cost": 4.679,
+      "citation": 0.946
+    }
+  },
+  "rows": [
+    {
+      "id": "q26",
+      "arm": "baseline",
+      "correct": 1,
+      "gold": 1,
+      "supported": 2,
+      "cited": 5,
+      "cost": 0.173
+    },
+    {
+      "id": "q26",
+      "arm": "new",
+      "correct": 1,
+      "gold": 1,
+      "supported": 2,
+      "cited": 3,
+      "cost": 0.212
+    },
+    {
+      "id": "q27",
+      "arm": "baseline",
+      "correct": 1,
+      "gold": 1,
+      "supported": 6,
+      "cited": 8,
+      "cost": 0.173
+    },
+    {
+      "id": "q28",
+      "arm": "new",
+      "correct": 1,
+      "gold": 1,
+      "supported": 8,
+      "cited": 8,
+      "cost": 0.173
+    },
+    {
+      "id": "q28",
+      "arm": "baseline",
+      "correct": 1,
+      "gold": 1,
+      "supported": 7,
+      "cited": 7,
+      "cost": 0.169
+    },
+    {
+      "id": "q27",
+      "arm": "new",
+      "correct": 1,
+      "gold": 1,
+      "supported": 2,
+      "cited": 3,
+      "cost": 0.214
+    },
+    {
+      "id": "q29",
+      "arm": "baseline",
+      "correct": 1,
+      "gold": 1,
+      "supported": 7,
+      "cited": 7,
+      "cost": 0.148
+    },
+    {
+      "id": "q29",
+      "arm": "new",
+      "correct": 1,
+      "gold": 1,
+      "supported": 9,
+      "cited": 10,
+      "cost": 0.211
+    },
+    {
+      "id": "q30",
+      "arm": "baseline",
+      "correct": 1,
+      "gold": 1,
+      "supported": 8,
+      "cited": 8,
+      "cost": 0.202
+    },
+    {
+      "id": "q30",
+      "arm": "new",
+      "correct": 1,
+      "gold": 1,
+      "supported": 8,
+      "cited": 8,
+      "cost": 0.199
+    },
+    {
+      "id": "q31",
+      "arm": "baseline",
+      "correct": 1,
+      "gold": 1,
+      "supported": 4,
+      "cited": 4,
+      "cost": 0.128
+    },
+    {
+      "id": "q31",
+      "arm": "new",
+      "correct": 1,
+      "gold": 1,
+      "supported": 7,
+      "cited": 7,
+      "cost": 0.176
+    },
+    {
+      "id": "q32",
+      "arm": "baseline",
+      "correct": 1,
+      "gold": 1,
+      "supported": 3,
+      "cited": 3,
+      "cost": 0.167
+    },
+    {
+      "id": "q32",
+      "arm": "new",
+      "correct": 1,
+      "gold": 1,
+      "supported": 3,
+      "cited": 3,
+      "cost": 0.207
+    },
+    {
+      "id": "q33",
+      "arm": "baseline",
+      "correct": 1,
+      "gold": 1,
+      "supported": 7,
+      "cited": 7,
+      "cost": 0.176
+    },
+    {
+      "id": "q34",
+      "arm": "baseline",
+      "correct": 1,
+      "gold": 1,
+      "supported": 4,
+      "cited": 4,
+      "cost": 0.173
+    },
+    {
+      "id": "q34",
+      "arm": "new",
+      "correct": 1,
+      "gold": 1,
+      "supported": 9,
+      "cited": 9,
+      "cost": 0.241
+    },
+    {
+      "id": "q35",
+      "arm": "baseline",
+      "correct": 1,
+      "gold": 1,
+      "supported": 8,
+      "cited": 8,
+      "cost": 0.153
+    },
+    {
+      "id": "q33",
+      "arm": "new",
+      "correct": 1,
+      "gold": 1,
+      "supported": 9,
+      "cited": 10,
+      "cost": 0.358
+    },
+    {
+      "id": "q36",
+      "arm": "baseline",
+      "correct": 1,
+      "gold": 1,
+      "supported": 2,
+      "cited": 2,
+      "cost": 0.106
+    },
+    {
+      "id": "q35",
+      "arm": "new",
+      "correct": 1,
+      "gold": 1,
+      "supported": 6,
+      "cited": 6,
+      "cost": 0.189
+    },
+    {
+      "id": "q36",
+      "arm": "new",
+      "correct": 1,
+      "gold": 1,
+      "supported": 3,
+      "cited": 3,
+      "cost": 0.172
+    },
+    {
+      "id": "q37",
+      "arm": "baseline",
+      "correct": 1,
+      "gold": 1,
+      "supported": 3,
+      "cited": 3,
+      "cost": 0.147
+    },
+    {
+      "id": "q37",
+      "arm": "new",
+      "correct": 1,
+      "gold": 1,
+      "supported": 10,
+      "cited": 11,
+      "cost": 0.188
+    },
+    {
+      "id": "q38",
+      "arm": "baseline",
+      "correct": 1,
+      "gold": 1,
+      "supported": 6,
+      "cited": 6,
+      "cost": 0.162
+    },
+    {
+      "id": "q38",
+      "arm": "new",
+      "correct": 1,
+      "gold": 1,
+      "supported": 6,
+      "cited": 8,
+      "cost": 0.216
+    },
+    {
+      "id": "q39",
+      "arm": "baseline",
+      "correct": 1,
+      "gold": 1,
+      "supported": 9,
+      "cited": 9,
+      "cost": 0.184
+    },
+    {
+      "id": "q39",
+      "arm": "new",
+      "correct": 1,
+      "gold": 1,
+      "supported": 9,
+      "cited": 9,
+      "cost": 0.218
+    },
+    {
+      "id": "q40",
+      "arm": "baseline",
+      "correct": 1,
+      "gold": 1,
+      "supported": 7,
+      "cited": 7,
+      "cost": 0.17
+    },
+    {
+      "id": "q40",
+      "arm": "new",
+      "correct": 1,
+      "gold": 1,
+      "supported": 11,
+      "cited": 11,
+      "cost": 0.225
+    },
+    {
+      "id": "q41",
+      "arm": "baseline",
+      "correct": 1,
+      "gold": 1,
+      "supported": 3,
+      "cited": 4,
+      "cost": 0.152
+    },
+    {
+      "id": "q42",
+      "arm": "new",
+      "correct": 1,
+      "gold": 1,
+      "supported": 6,
+      "cited": 6,
+      "cost": 0.162
+    },
+    {
+      "id": "q41",
+      "arm": "new",
+      "correct": 1,
+      "gold": 1,
+      "supported": 7,
+      "cited": 7,
+      "cost": 0.228
+    },
+    {
+      "id": "q42",
+      "arm": "baseline",
+      "correct": 1,
+      "gold": 1,
+      "supported": 4,
+      "cited": 4,
+      "cost": 0.171
+    },
+    {
+      "id": "q43",
+      "arm": "baseline",
+      "correct": 1,
+      "gold": 1,
+      "supported": 5,
+      "cited": 5,
+      "cost": 0.172
+    },
+    {
+      "id": "q44",
+      "arm": "baseline",
+      "correct": 1,
+      "gold": 1,
+      "supported": 6,
+      "cited": 6,
+      "cost": 0.159
+    },
+    {
+      "id": "q43",
+      "arm": "new",
+      "correct": 1,
+      "gold": 1,
+      "supported": 4,
+      "cited": 4,
+      "cost": 0.219
+    },
+    {
+      "id": "q44",
+      "arm": "new",
+      "correct": 1,
+      "gold": 1,
+      "supported": 4,
+      "cited": 4,
+      "cost": 0.185
+    },
+    {
+      "id": "q45",
+      "arm": "baseline",
+      "correct": 1,
+      "gold": 0,
+      "supported": 4,
+      "cited": 4,
+      "cost": 0.17
+    },
+    {
+      "id": "q46",
+      "arm": "baseline",
+      "correct": 1,
+      "gold": 1,
+      "supported": 7,
+      "cited": 7,
+      "cost": 0.183
+    },
+    {
+      "id": "q46",
+      "arm": "new",
+      "correct": 1,
+      "gold": 1,
+      "supported": 7,
+      "cited": 7,
+      "cost": 0.209
+    },
+    {
+      "id": "q45",
+      "arm": "new",
+      "correct": 1,
+      "gold": 1,
+      "supported": 4,
+      "cited": 4,
+      "cost": 0.214
+    },
+    {
+      "id": "q47",
+      "arm": "baseline",
+      "correct": 1,
+      "gold": 1,
+      "supported": 2,
+      "cited": 3,
+      "cost": 0.15
+    },
+    {
+      "id": "q47",
+      "arm": "new",
+      "correct": 1,
+      "gold": 1,
+      "supported": 6,
+      "cited": 7,
+      "cost": 0.263
+    }
+  ],
+  "recheck": [
+    {
+      "id": "q27",
+      "arm": "baseline",
+      "limited": false,
+      "correct": 0,
+      "cited": 7,
+      "supported": 7,
+      "judges": [
+        {
+          "model": "sonnet",
+          "correct": 0,
+          "cited": 7,
+          "supported": 7,
+          "cost": 0.07797478499999999,
+          "tools": 3
+        }
+      ],
+      "gold": 1,
+      "cost": 0.17288806999999998,
+      "runCost": 0.09491328499999999,
+      "judgeCost": 0.07797478499999999,
+      "tools": [
+        "Agent",
+        "WebFetch",
+        "WebFetch",
+        "Agent",
+        "WebFetch",
+        "WebFetch"
+      ],
+      "answer": "**Answer:** The Winter Palace was stormed on the night of 7–8 November 1917 (Gregorian). The main assault and capture came in the early hours of 8 November, which is 26 October in the Julian calendar. The uprising as a whole began on 7 November (25 October Julian). Many sources give 7 November as \"the\" date because that is the day the revolution began.\n\nI could not fully verify the 8 November capture date. It rests on summarized text, not verbatim quotes, and I did not open a second independent source.\n\n**Verified verbatim (Wikipedia, https://en.wikipedia.org/wiki/October_Revolution, read via fetch):**\n- Lead: \"It began through an insurrection in Petrograd (now Saint Petersburg) on 7 November 1917 [O.S. 25 October].\"\n- Infobox: \"7 November 1917 [O.S. 25 October]\". This is the start of the uprising, not specifically the palace capture.\n- Image caption: \"The Winter Palace of Petrograd, one day after the insurrection, 8 November\".\n- Historiography section: \"The date 7 November, the anniversary of the October Revolution according to the Gregorian Calendar, was the official national day of the Soviet Union from 1918 onward...\"\n\n**Not verified verbatim (summary-extracted only):**\n- Lead: \"In the early morning of 26 October [N.S. 8 November], they captured the Winter Palace\".\n- \"By 2:10 a.m. on 26 October, Bolshevik forces had gained control.\"\n- The name: \"Despite occurring in November of the Gregorian calendar, the event is most commonly known as the October Revolution... because at the time Russia still used the Julian calendar.\"\n\n**Could not get:** Britannica returned HTTP 403, and the \"Assault on the Winter Palace\" section text was never read directly. I did not check the page date, and Wikipedia is a secondary source. A primary or scholarly source would be better for the exact hour."
+    },
+    {
+      "id": "q27",
+      "arm": "new",
+      "limited": false,
+      "correct": 0,
+      "cited": 5,
+      "supported": 3,
+      "judges": [
+        {
+          "model": "sonnet",
+          "correct": 0,
+          "cited": 5,
+          "supported": 3,
+          "cost": 0.09563496499999999,
+          "tools": 6
+        }
+      ],
+      "gold": 1,
+      "cost": 0.23029677499999998,
+      "runCost": 0.13466181,
+      "judgeCost": 0.09563496499999999,
+      "tools": [
+        "Read",
+        "ToolSearch",
+        "WebSearch",
+        "Agent",
+        "WebFetch",
+        "WebFetch",
+        "WebFetch",
+        "Agent",
+        "WebFetch",
+        "WebFetch"
+      ],
+      "answer": "**Answer:** The Winter Palace was stormed on the night of 7–8 November 1917 (Gregorian). The Bolsheviks controlled it by about 2:10 a.m. on 8 November, which is 26 October in the Julian calendar. The revolution as a whole is conventionally dated 7 November (25 October Old Style).\n\n**Confidence:** High for the 7 November (revolution) and 8 November (palace captured) dates. Medium on the exact night split, because sources differ on which night they assign.\n\n**Depth:** Standard. I made one search and two page-reading passes. I did not use the vault, and I wrote nothing to it.\n\n## Findings\n\n- The revolution's start is dated 7 November 1917 (25 October Old Style).\n  - Source: https://en.wikipedia.org/wiki/October_Revolution\n  - Quote: \"It began through an insurrection in Petrograd (now Saint Petersburg) on 7 November 1917 [O.S. 25 October].\"\n- The palace itself was captured in the early hours of 8 November Gregorian (26 October Julian).\n  - Source: https://en.wikipedia.org/wiki/Storming_of_the_Winter_Palace. This URL redirects to the October Revolution article.\n  - Quote: \"In the early morning of 26 October [N.S. 8 November], they captured the Winter Palace\"\n  - Quote on timing: \"By 2:10 a.m. on 26 October, Bolshevik forces had gained control.\"\n  - The page does not label that 2:10 a.m. sentence as Old Style. I inferred it from the article's convention of giving both calendars.\n- The Julian-to-Gregorian offset in 1917 was 13 days. 25 October Old Style plus 13 days is 7 November, and 26 October is 8 November.\n  - I did not cite a separate source for the offset. It is arithmetic, and both Wikipedia date pairs agree with it.\n\n## Conflicts and gaps\n\n- **One source gives a different night.**\n  - Source: https://historycollection.com/russian-revolution-dates-february-october-1917/\n  - It says \"On the night of October 24-25 by the Julian calendar — November 7, 1917 by the Gregorian calendar — Bolshevik Red Guards...\"\n  - That is a tertiary source and differs from Wikipedia. I trust the Wikipedia dating more because it gives a specific 2:10 a.m. time for the palace.\n- **\"7 November\" can mean two things.** It is the date of the insurrection's start, and many sources use it loosely for the storming. The palace fell after midnight, on 8 November.\n- **I could not read Britannica.** The page returned 403, so I did not use it.\n- **Wikipedia is the only source for the palace-capture date.** I did not find an independent second source for that detail.\n- **I could not check the last ~74,000 characters of the Wikipedia article.**\n\n## Sources\n\n[1] October Revolution, Wikipedia. https://en.wikipedia.org/wiki/October_Revolution\n[2] Storming of the Winter Palace, Wikipedia (redirects to [1]). https://en.wikipedia.org/wiki/Storming_of_the_Winter_Palace\n[3] Russian Revolution dates, History Collection. https://historycollection.com/russian-revolution-dates-february-october-1917/"
+    }
+  ]
+}

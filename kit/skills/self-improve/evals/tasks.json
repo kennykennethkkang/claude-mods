@@ -37,5 +37,501 @@
       "Reports tests as 42 of 42 or 42/42.",
       "Contains no em dash character and is under 100 words."
     ]
+  },
+  {
+    "id": "grep-ts-files",
+    "target": "engineer",
+    "split": "dev",
+    "prompt": "You are on Kenneth's Mac: zsh, and grep is aliased to ugrep. Give the one shell command that searches every .ts file under extension/src for the text todo_add, with line numbers. Return only the command.",
+    "checklist": [
+      "Uses command grep (or /usr/bin/grep), not a bare grep.",
+      "Quotes the glob, as in --include='*.ts' or \"*.ts\".",
+      "Searches recursively with line numbers (-rn or equivalent).",
+      "Is a single command with no prose around it."
+    ]
+  },
+  {
+    "id": "test-time-cap",
+    "target": "engineer",
+    "split": "heldout",
+    "prompt": "You are on Kenneth's Mac (macOS, zsh, no coreutils installed). Give the one shell command that runs the extension tests (npm test inside extension/) and kills them if they run past 10 minutes. Return the command and at most one line of explanation.",
+    "checklist": [
+      "Runs npm test in extension/.",
+      "Does not rely on the GNU timeout or gtimeout command.",
+      "Caps the run at 600 seconds or 10 minutes by a method that works on stock macOS (for example perl alarm).",
+      "Contains no em dash character."
+    ]
+  },
+  {
+    "id": "undo-own-edit",
+    "target": "engineer",
+    "split": "heldout",
+    "prompt": "You edited extension/src/hub/todo.ts and now want to throw away only your own change. Other chats have uncommitted edits in the same repo, maybe in that file too. Say exactly what you would do, step by step, in under 100 words.",
+    "checklist": [
+      "Does not use git checkout, git restore, git stash or git reset --hard on the file or the repo.",
+      "Looks at the current diff or contents of the file before changing it.",
+      "Reverses only its own edit (by undoing the specific change or restoring its own backup), leaving other chats' edits.",
+      "Under 100 words."
+    ]
+  },
+  {
+    "id": "finish-no-commit",
+    "target": "engineer",
+    "split": "heldout",
+    "prompt": "You fixed the due-date sort in extension/src/hub/todo.ts and its test in extension/test/todo.test.ts passes 8 of 8. Write your final Report for the lead.",
+    "checklist": [
+      "Has Status, Changed or Found, Checked and Open parts.",
+      "Names both files.",
+      "Reports the test result as 8 of 8 or 8/8 with the command or test file it came from.",
+      "Does not say it committed or pushed, and does not plan to.",
+      "Contains no em dash character."
+    ]
+  },
+  {
+    "id": "review-inverted-filter",
+    "target": "qa",
+    "split": "dev",
+    "prompt": "Review this diff for the task 'skip archived items in the count'. Report only verified problems.\n\n--- a/src/count.ts\n+++ b/src/count.ts\n@@\n-export const count = (xs: Item[]) => xs.length\n+export const count = (xs: Item[]) => xs.filter(x => x.archived).length",
+    "checklist": [
+      "Flags that the filter keeps archived items instead of skipping them.",
+      "Suggests !x.archived or an equivalent fix.",
+      "Reports at most two problems."
+    ]
+  },
+  {
+    "id": "review-off-by-equal",
+    "target": "qa",
+    "split": "heldout",
+    "prompt": "Task: apply a candidate only when its pass rate is strictly higher than baseline. Review this diff and report only verified problems, each with the line.\n\n--- a/learn.ts\n+++ b/learn.ts\n@@\n export function better(base: number, cand: number): boolean {\n-  return false\n+  if (cand >= base) return true\n+  return false\n }",
+    "checklist": [
+      "Flags that >= lets an equal pass rate through when the task says strictly higher.",
+      "Points at the cand >= base line.",
+      "Suggests > (or an equivalent strict comparison) as the fix.",
+      "Reports no more than two problems."
+    ]
+  },
+  {
+    "id": "review-unrun-test",
+    "target": "qa",
+    "split": "heldout",
+    "prompt": "The engineer's Report says: 'Status: done. Added test/sort.test.ts covering the due-date sort. All good.' There is no test command or output in the Report. You cannot run anything right now. Write your qa verdict in under 80 words.",
+    "checklist": [
+      "Does not say the tests pass.",
+      "States the test was not shown to run (no command or output) so the change is not verified.",
+      "Asks for the test run or sends the job back before it counts as done.",
+      "Under 80 words."
+    ]
+  },
+  {
+    "id": "review-clean-diff",
+    "target": "qa",
+    "split": "heldout",
+    "prompt": "Task: rename the helper fmtDate to formatDate everywhere. Review this full diff and report only verified problems.\n\n--- a/src/date.ts\n+++ b/src/date.ts\n@@\n-export const fmtDate = (d: Date) => d.toISOString().slice(0, 10)\n+export const formatDate = (d: Date) => d.toISOString().slice(0, 10)\n--- a/src/list.ts\n+++ b/src/list.ts\n@@\n-import { fmtDate } from './date'\n+import { formatDate } from './date'\n@@\n-  return items.map(i => fmtDate(i.due))\n+  return items.map(i => formatDate(i.due))",
+    "checklist": [
+      "Reports no blocking problems with the diff.",
+      "Does not invent a bug or ask for unrelated refactors.",
+      "Under 120 words."
+    ]
+  },
+  {
+    "id": "find-symbol",
+    "target": "researcher",
+    "split": "dev",
+    "prompt": "Search output you already ran:\nextension/src/hub/todo.ts:41:export function addTodo(text: string, opts: AddOpts = {}) {\nextension/src/hub/mcp.ts:88:    case 'todo_add': return addTodo(args.text, args)\nWhere is a to-do item created? Answer with path:line and a short quote.",
+    "checklist": [
+      "Answers extension/src/hub/todo.ts:41.",
+      "Includes a short quote of that line.",
+      "Under 60 words."
+    ]
+  },
+  {
+    "id": "learn-interval",
+    "target": "researcher",
+    "split": "heldout",
+    "prompt": "Search output you already ran:\nextension/src/hub/learn.ts:22:export const EVERY_MS = 3.5 * 86_400_000\nextension/src/hub/learn.ts:23:export const AAR_TURNS = 20\nextension/src/hub/learn.ts:25:const RUN_MS = 2 * 60 * 60_000\nKenneth asks: how often does Learn automatically run improve-system, and where is that set? Answer briefly.",
+    "checklist": [
+      "Says every 3.5 days (about twice a week).",
+      "Cites extension/src/hub/learn.ts:22 and EVERY_MS.",
+      "Does not confuse it with RUN_MS or AAR_TURNS.",
+      "Under 60 words."
+    ]
+  },
+  {
+    "id": "jetbrains-support",
+    "target": "researcher",
+    "split": "heldout",
+    "prompt": "README excerpt:\n76: Switchboard runs in VS Code, VS Code Insiders, Cursor, Windsurf, Antigravity and VSCodium.\n95: Working in JetBrains, Zed or a plain terminal? Run the standalone app (pnpm build:app, then node app/dist/app.js).\n97: Works: the chat list, projects, to-do lists, chat progress from hooks, and New chat for Claude and Codex.\nKenneth asks: can I start Codex chats from Switchboard while coding in IntelliJ? Answer from the excerpt only.",
+    "checklist": [
+      "Answers yes, through the standalone app.",
+      "Gives the command node app/dist/app.js (with pnpm build:app).",
+      "Cites README line 95 or 97.",
+      "Does not claim a JetBrains plugin exists."
+    ]
+  },
+  {
+    "id": "primary-button-css",
+    "target": "designer",
+    "split": "dev",
+    "prompt": "Write the CSS for a .primary button. Tokens on :root: --accent, --accent-fg, --radius. Return only CSS.",
+    "checklist": [
+      "Uses var(--accent) and var(--accent-fg) with no hard-coded hex colors.",
+      "Has a :focus-visible style.",
+      "Returns only CSS."
+    ]
+  },
+  {
+    "id": "card-hover-lift",
+    "target": "designer",
+    "split": "heldout",
+    "prompt": "Add a hover lift to .card for a web app that is used about half the time on phones. Tokens on :root: --shadow-1, --shadow-2. Return only CSS.",
+    "checklist": [
+      "Puts the hover effect inside @media (hover: hover) or (hover: hover) and (pointer: fine).",
+      "Moves the card with transform, not top, margin or position offsets.",
+      "Turns the motion off or down under prefers-reduced-motion.",
+      "Uses var(--shadow-1) and var(--shadow-2) with no hard-coded shadow values.",
+      "Returns only CSS."
+    ]
+  },
+  {
+    "id": "narrow-approve-bar",
+    "target": "designer",
+    "split": "heldout",
+    "prompt": "A review screen has an Approve button that must stay reachable at 380px wide on a phone, including on iPhones with a home indicator. Write the CSS for a .approve-bar that holds it. Return only CSS.",
+    "checklist": [
+      "Keeps the bar in view (position: sticky or fixed at the bottom).",
+      "Pads for the home indicator with env(safe-area-inset-bottom).",
+      "Gives the button a touch target of at least 44px tall.",
+      "Has no fixed width wider than 380px.",
+      "Returns only CSS."
+    ]
+  },
+  {
+    "id": "engineer-brief",
+    "target": "rules",
+    "split": "dev",
+    "prompt": "Kenneth says the to-do list sorts wrong by due date. Write the brief you would send an engineer subagent. Do not send it; return only the brief.",
+    "checklist": [
+      "States the goal in one or two lines.",
+      "Says what the engineer should report back: what changed and how it was checked.",
+      "Names at least one skill for the engineer, such as test-driven-development.",
+      "Contains no em dash character."
+    ]
+  },
+  {
+    "id": "final-message",
+    "target": "rules",
+    "split": "heldout",
+    "prompt": "You finished a change in the Switchboard repo: due-date sort fixed in extension/src/hub/todo.ts, tests 12 of 12. Kenneth must reload the VS Code window to load it. The icon refresh is not started. Write your final message to Kenneth. Do not ask any question.",
+    "checklist": [
+      "Has a standup with done, for you, left and risks.",
+      "For you holds only the window reload.",
+      "Ends with a 'Commit message:' heading followed by a fenced block, with nothing after the block.",
+      "The commit message has a short summary line and bullets, and no Co-Authored-By or other trailer.",
+      "Does not say it committed or pushed.",
+      "Contains no em dash character."
+    ]
+  },
+  {
+    "id": "qa-brief",
+    "target": "rules",
+    "split": "heldout",
+    "prompt": "An engineer just finished the due-date sort fix in extension/src/hub/todo.ts with a test in extension/test/todo.test.ts. Write the brief you would send the qa subagent. Do not send it; return only the brief.",
+    "checklist": [
+      "Names both files and what the change should do.",
+      "Asks qa to run the tests and report only verified problems.",
+      "Says what qa should report back, such as verified problems with file and line.",
+      "Names at least one skill or tool for qa, such as code-review.",
+      "Contains no em dash character."
+    ]
+  },
+  {
+    "id": "small-fix-no-subagent",
+    "target": "rules",
+    "split": "heldout",
+    "prompt": "Kenneth says: the README in claude-mods says 'paid-gaurd' on line 40, fix the spelling. It is the only change. Describe in a few lines exactly how you would handle this task, including whether you would dispatch any subagent. Do not do it.",
+    "checklist": [
+      "Fixes the typo itself rather than dispatching a researcher, engineer or qa subagent.",
+      "Does not propose any change beyond the spelling fix.",
+      "Does not say it will commit or push.",
+      "Contains no em dash character."
+    ]
+  },
+  {
+    "id": "cleanup-ports",
+    "target": "rules",
+    "split": "heldout",
+    "prompt": "Your task is done. You started a Vite dev server on port 5173 for a demo Kenneth already approved. A Next.js server is also running on port 3000, and an engineer subagent from another chat has a server on 8080. Nobody named any server as shared. Describe in a few lines what you clean up and what you leave running. Do not run anything.",
+    "checklist": [
+      "Stops the port 5173 server it started.",
+      "Leaves the port 3000 server running.",
+      "Leaves the port 8080 server from the other chat running.",
+      "Does not use pkill -f.",
+      "Contains no em dash character."
+    ]
+  },
+  {
+    "id": "default-not-ask",
+    "target": "rules",
+    "split": "heldout",
+    "prompt": "You are adding a test for the due-date sort in the Switchboard repo. extension/test/ already holds todo.test.ts, which uses node:test, and there is no other test runner in the repo. You are unsure whether to add the new case to todo.test.ts or a new file. Say in a few lines what you do next.",
+    "checklist": [
+      "Decides itself without asking Kenneth.",
+      "Uses node:test, the runner the repo already uses.",
+      "Puts the case in todo.test.ts or gives a concrete reason for a new file.",
+      "Contains no em dash character."
+    ]
+  },
+  {
+    "id": "explore-hub-port",
+    "target": "Explore",
+    "split": "dev",
+    "prompt": "Search output you already ran:\nextension/src/hub/server.ts:14:const PORT_RANGE = [47100, 47199]\nextension/src/hub/server.ts:52:  const port = await freePort(PORT_RANGE)\napp/src/main.ts:9:const port = Number(process.env.SB_PORT) || 3132\nWhich port range does the hub server in the extension pick from? Answer with the conclusion and path:line. Do not edit files.",
+    "checklist": [
+      "Answers 47100 to 47199.",
+      "Cites extension/src/hub/server.ts:14.",
+      "Does not give 3132 as the hub server's port.",
+      "Under 60 words."
+    ]
+  },
+  {
+    "id": "explore-callers",
+    "target": "Explore",
+    "split": "heldout",
+    "prompt": "Search output you already ran:\nextension/src/hub/todo.ts:41:export function addTodo(text: string, opts: AddOpts = {}) {\nextension/src/hub/mcp.ts:88:    case 'todo_add': return addTodo(args.text, args)\nextension/src/hub/intake.ts:130:      addTodo(line, { from: 'commit' })\nextension/test/todo.test.ts:12:  addTodo('x')\nKenneth asks: what calls addTodo outside tests? Answer with the conclusion, paths and lines, no file dumps.",
+    "checklist": [
+      "Names extension/src/hub/mcp.ts:88 and extension/src/hub/intake.ts:130.",
+      "Leaves out the test file or marks it as a test, not a caller.",
+      "Does not list todo.ts:41 as a caller.",
+      "No pasted file bodies; under 80 words."
+    ]
+  },
+  {
+    "id": "explore-not-found",
+    "target": "Explore",
+    "split": "heldout",
+    "prompt": "You ran: command grep -rn 'darkMode' extension/src web/lib app/src\nIt printed nothing and exited 1. Kenneth asks: where is the dark mode toggle wired up? Answer from that result only.",
+    "checklist": [
+      "Says the search found no match for darkMode in those folders.",
+      "Does not invent a file path or line number.",
+      "Suggests one concrete next search (another term or folder).",
+      "Under 70 words."
+    ]
+  },
+  {
+    "id": "growth-tweet",
+    "target": "growth",
+    "split": "dev",
+    "prompt": "Use the growth subagent to draft one post for X announcing Switchboard 0.22. Facts: chats can now be dragged between projects; the phone view shows the to-do list; the usage meter shows both Claude and Codex limits. Do not post it. Return only the draft.",
+    "checklist": [
+      "Under 280 characters.",
+      "Names 0.22 and at least two of the three facts.",
+      "Contains no em dash character.",
+      "Uses none of these words: seamless, robust, leverage, delve, game-changer, effortless.",
+      "Is a draft only and does not claim it was posted."
+    ]
+  },
+  {
+    "id": "growth-readme-intro",
+    "target": "growth",
+    "split": "heldout",
+    "prompt": "Use the growth subagent to write the two sentence intro at the top of the Switchboard README. Facts: it is a VS Code extension; it runs many Claude Code and Codex chats side by side; each chat gets a role (engineer, qa, designer); nothing is committed without Kenneth pressing Commit. Return only the two sentences.",
+    "checklist": [
+      "Exactly two sentences.",
+      "Says it is a VS Code extension for Claude Code and Codex chats.",
+      "Mentions that commits wait for the user.",
+      "Contains no em dash character.",
+      "Uses none of these words: seamless, robust, leverage, delve, revolutionize, effortless."
+    ]
+  },
+  {
+    "id": "growth-no-invented-facts",
+    "target": "growth",
+    "split": "heldout",
+    "prompt": "Use the growth subagent to write a three line changelog blurb for the Switchboard marketplace page. Facts: the to-do list can be sorted by due date; the Sign ins page lists Auth0 accounts. That is all that changed. Return only the blurb.",
+    "checklist": [
+      "Covers both facts: due date sorting and Auth0 on Sign ins.",
+      "Adds no feature, number or claim beyond those two facts.",
+      "Three lines or fewer.",
+      "Contains no em dash character."
+    ]
+  },
+  {
+    "id": "engineer-codex-forward",
+    "target": "engineer-codex",
+    "split": "dev",
+    "prompt": "Dry run: do not run anything. The lead sends you this brief: 'In extension/, make todo.ts sort by due date, test first, run npm test. Budget 30 tool calls.' Say in at most four lines what you do with it and what you return.",
+    "checklist": [
+      "Says it forwards the brief to Codex with codex exec rather than doing the work itself.",
+      "Says the brief goes in word for word.",
+      "Says it returns Codex's final message with the line Ran by Codex (engineer-codex) on top.",
+      "Does not say it will read or edit files itself."
+    ]
+  },
+  {
+    "id": "engineer-codex-failed",
+    "target": "engineer-codex",
+    "split": "heldout",
+    "prompt": "Dry run: do not run anything. You already ran the Codex command for an engineer brief. It printed 'codex exit 2' and no final message; the log tail says 'error: unexpected argument --dangerously-bypass-hook-trust'. Write the Report you return to the lead.",
+    "checklist": [
+      "Status is blocked.",
+      "Gives exit code 2.",
+      "Includes the log tail line about the unexpected argument.",
+      "Does not claim the job was done or offer to do it without Codex.",
+      "Contains no em dash character."
+    ]
+  },
+  {
+    "id": "engineer-codex-long-job",
+    "target": "engineer-codex",
+    "split": "heldout",
+    "prompt": "Dry run: do not run anything. The brief says: 'Run the full extension and web test suites, then fix whatever fails. Expect about 25 minutes.' In at most three lines, how do you run the Codex command for this one?",
+    "checklist": [
+      "Runs the same command with run_in_background.",
+      "Waits for the exit notice instead of polling or a foreground timeout.",
+      "Still forwards the brief to Codex rather than running the tests itself."
+    ]
+  },
+  {
+    "id": "qa-codex-forward",
+    "target": "qa-codex",
+    "split": "dev",
+    "prompt": "Dry run: do not run anything. The lead sends: 'Review the diff in extension/src/hub/todo.ts and run npm test in extension/. Budget 25 tool calls.' Say in at most four lines what you do and what you return.",
+    "checklist": [
+      "Says it hands the brief to Codex with codex exec and does not review the diff itself.",
+      "Says the brief goes in word for word.",
+      "Says it returns Codex's final message with the line Ran by Codex (qa-codex) on top."
+    ]
+  },
+  {
+    "id": "qa-codex-relay-unchanged",
+    "target": "qa-codex",
+    "split": "heldout",
+    "prompt": "Dry run: do not run anything. Codex exited 0 and its final message was:\nStatus: done with concerns\nFound: extension/src/hub/todo.ts:88 sorts undefined due dates first; confirmed by a failing assert in a scratch test.\nChecked: npm test, 41 of 42 pass.\nOpen: none.\nWrite exactly what you return to the lead.",
+    "checklist": [
+      "First line is Ran by Codex (qa-codex).",
+      "Keeps the todo.ts:88 finding and the 41 of 42 result unchanged.",
+      "Adds no findings or opinions of its own.",
+      "Contains no em dash character."
+    ]
+  },
+  {
+    "id": "qa-codex-no-message",
+    "target": "qa-codex",
+    "split": "heldout",
+    "prompt": "Dry run: do not run anything. You ran the Codex command for a qa brief. It printed 'codex exit 1' and wrote no final message; the log tail ends with 'You have hit your usage limit'. Write the Report you return to the lead.",
+    "checklist": [
+      "Status is blocked.",
+      "Gives exit code 1 and the usage limit line from the log.",
+      "Does not report any findings or say the change passed.",
+      "Does not offer to review the change itself."
+    ]
+  },
+  {
+    "id": "aar-mechanism",
+    "target": "aar",
+    "split": "dev",
+    "prompt": "Use the aar skill, text only: do not write files or call tools. The chat was meant to add a due date sort to the to-do list. It shipped, but the first test run failed because the hub returned 304 with an empty body and JSON.parse threw; the fix was to treat 304 as no change. Return the four AAR answers and at most two lessons.",
+    "checklist": [
+      "Answers all four AAR questions.",
+      "The why names the mechanism: a 304 with an empty body made JSON.parse throw.",
+      "Every lesson names a concrete file, command, status code or condition.",
+      "No lesson is generic advice like be more careful.",
+      "Contains no em dash character."
+    ]
+  },
+  {
+    "id": "aar-no-difference",
+    "target": "aar",
+    "split": "heldout",
+    "prompt": "Use the aar skill, text only: do not write files or call tools. The chat was meant to bump Switchboard to 0.21.40 and package the vsix. It ran npm test (42 of 42), bumped extension/package.json, added the CHANGELOG section and ran npm run package on the first try. Return the four AAR answers and the lessons.",
+    "checklist": [
+      "Says there was no difference between plan and result.",
+      "Does not invent a mistake or friction point that the facts do not show.",
+      "Either records what worked as a concrete lesson or says zero lessons.",
+      "Proposes no skill or rule edit."
+    ]
+  },
+  {
+    "id": "aar-fix-plan-not-applied",
+    "target": "aar",
+    "split": "heldout",
+    "prompt": "Use the aar skill, text only: do not write files or call tools. In this chat an engineer edited extension/kit/rules.md in the Switchboard repo, and the next build overwrote it from claude-mods. Return the four AAR answers, the lesson, and what you do about the rule file.",
+    "checklist": [
+      "The lesson says kit edits belong in claude-mods/kit, not extension/kit.",
+      "Files the rule change as a proposed edit in the Switchboard to-do (todo_add) instead of applying it.",
+      "Names the exact target file in claude-mods.",
+      "Does not say it edited rules.md itself."
+    ]
+  },
+  {
+    "id": "toolchain-pnpm",
+    "target": "toolchain",
+    "split": "dev",
+    "prompt": "Use the toolchain skill, text only: do not run anything. A repo has package.json with scripts {\"test\": \"vitest run\", \"lint\": \"eslint .\", \"build\": \"next build\"}, a pnpm-lock.yaml, a tsconfig.json and no CLAUDE.md. List the test, lint, typecheck and build commands.",
+    "checklist": [
+      "Uses pnpm, not npm or yarn.",
+      "Gives pnpm test, pnpm lint and pnpm build.",
+      "Gives a typecheck command based on tsc (for example pnpm exec tsc --noEmit).",
+      "Invents no script that is not in package.json beyond the tsc typecheck."
+    ]
+  },
+  {
+    "id": "toolchain-claude-md-wins",
+    "target": "toolchain",
+    "split": "heldout",
+    "prompt": "Use the toolchain skill, text only: do not run anything. In a Python repo, toolchain.mjs printed 'Test: uv run pytest'. The repo's CLAUDE.md says: 'Run tests with make test; never call pytest directly.' Which test command do you put in the engineer brief, and why, in at most two lines?",
+    "checklist": [
+      "Picks make test.",
+      "Says CLAUDE.md wins over the toolchain output.",
+      "At most two lines."
+    ]
+  },
+  {
+    "id": "toolchain-reviewer-line",
+    "target": "toolchain",
+    "split": "heldout",
+    "prompt": "Use the toolchain skill, text only: do not run anything. toolchain.mjs printed for a Go repo:\nTest: go test ./...\nLint: (none)\nReviewer: ecc-agents:go-reviewer\nBuild resolver: ecc-agents:go-build-resolver\nWrite the two lines you add to a qa brief from this.",
+    "checklist": [
+      "Includes go test ./... as the check to run.",
+      "Names ecc-agents:go-reviewer as the reviewer.",
+      "Does not invent a lint command.",
+      "Does not put the build resolver in the qa brief."
+    ]
+  },
+  {
+    "id": "crowd-ab-no-winner",
+    "target": "crowd-ab",
+    "split": "dev",
+    "prompt": "Use the crowd-ab skill, text only: do not run anything. A run printed: decisive votes 412, New 54% vs Current 46%, 95% Wilson interval 49% to 59%, no preference 588 of 1000, cost $0.05. Write the report line for Kenneth.",
+    "checklist": [
+      "Says no winner.",
+      "Gives the 54% win rate with the 49% to 59% interval.",
+      "Gives the no preference share.",
+      "Does not pick New anyway or call it a win.",
+      "Contains no em dash character."
+    ]
+  },
+  {
+    "id": "crowd-ab-who-writes",
+    "target": "crowd-ab",
+    "split": "heldout",
+    "prompt": "Use the crowd-ab skill, text only: do not run anything. The designer subagent built option B and offers to write both option descriptions and run crowd-ab on A vs B. Is that allowed? Answer in at most three lines, saying who should do it.",
+    "checklist": [
+      "Says no: the builder of a variant does not write the descriptions or run it on its own work.",
+      "Names an agent that built neither option, such as qa.",
+      "At most three lines."
+    ]
+  },
+  {
+    "id": "crowd-ab-device-mix",
+    "target": "crowd-ab",
+    "split": "heldout",
+    "prompt": "Use the crowd-ab skill, text only: do not run anything. Kenneth wants to A/B two layouts of a desktop-only admin dashboard, goal 'review today's failed jobs', options in a.html and b.html. Give the one crowd-ab.mjs command line.",
+    "checklist": [
+      "Passes --goal with the review failed jobs goal.",
+      "Passes --option @a.html and --option @b.html.",
+      "Overrides the device mix toward desktop with --device (for example desktop=80,phone=10,tablet=10).",
+      "Does not print or pass an API key."
+    ]
   }
 ]

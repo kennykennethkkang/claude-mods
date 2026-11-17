@@ -1,0 +1,1 @@
+{ "name": "todo-store", "private": true, "type": "module", "scripts": { "test": "node --test" } }

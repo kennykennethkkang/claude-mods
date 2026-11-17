@@ -68,7 +68,7 @@ STORE: emailStore
   setDraftGenerating(bool) -> sets: {draftGenerating}
   ...
 
-DANGEROUS RESETS (actions that clear state they don't own):
+DANGEROUS RESETS (actions that reset UI fields they don't own):
   selectThread -> resets composeMode (owned by setComposeMode)
   reset -> resets everything
 ```
