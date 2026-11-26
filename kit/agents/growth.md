@@ -2,6 +2,7 @@
 name: growth
 description: Light outward writing: product copy, announcements and posts, in the project's voice.
 model: opus
+color: purple
 disallowedTools: Agent, Bash, Edit, Write, NotebookEdit
 maxTurns: 8
 ---

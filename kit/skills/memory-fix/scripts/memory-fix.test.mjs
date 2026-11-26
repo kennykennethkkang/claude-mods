@@ -40,9 +40,20 @@ test('syncIndex drops missing files, appends unlisted notes, keeps other lines',
   assert.match(out, /# head/)
   assert.match(out, /\[A\]\(a\.md\)/)
   assert.doesNotMatch(out, /gone\.md/)
-  assert.match(out, /^- \[b\]\(b\.md\): about b$/m)
+  assert.match(out, /^- \[\]\(b\.md\) about b$/m)
   assert.equal(syncIndex(mem, new Set(['b.md'])).includes('b.md'), false)
   assert.doesNotMatch(out, /\u2014/)
+})
+
+test('syncIndex keeps an unproven note out of the index until it is proven', () => {
+  w('a.md', note('a'))
+  w('b.md', note('b', 'status: unproven\n'))
+  w('MEMORY.md', '- [](a.md) hook\n- [](b.md) guess\n')
+  assert.equal(syncIndex(mem), '- [](a.md) hook\n')
+  w('MEMORY.md', '- [](a.md) hook\n')
+  assert.equal(syncIndex(mem), undefined)
+  w('b.md', note('b').replace('about b', 'word '.repeat(40).trim()))
+  assert.match(syncIndex(mem), /^- \[\]\(b\.md\) (word ?){10,20}\.\.\.$/m)
 })
 
 test('plan and apply: retarget, archive a superseded note, back up first', () => {

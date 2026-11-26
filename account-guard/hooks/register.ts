@@ -75,7 +75,15 @@ export function clisOf(cmd: string, appIds: string[]): string[] {
 }
 
 function resolve(p: string, cwd: string, home: string) {
-  const abs = p === '~' || p.startsWith('~/') ? home + p.slice(1) : p.startsWith('/') ? p : `${cwd}/${p}`
+  p = p.replace(/\\/g, '/')
+  cwd = cwd.replace(/\\/g, '/'); home = home.replace(/\\/g, '/')
+  const abs = p === '~' || p.startsWith('~/') ? home + p.slice(1) : p.startsWith('/') || /^[a-z]:\//i.test(p) ? p : `${cwd}/${p}`
+  const drive = /^([a-z]:)(?:\/|$)/i.exec(abs)?.[1]
+  if (drive) {
+    const out: string[] = []
+    for (const s of abs.slice(drive.length).split('/')) { if (s === '..') out.pop(); else if (s && s !== '.') out.push(s) }
+    return `${drive}/${out.join('/')}`
+  }
   const out: string[] = []
   for (const s of abs.split('/')) {
     if (s === '..') out.pop()
@@ -96,8 +104,8 @@ export const targetOf = (cmd: string, cwd: string, home: string) => cdsOf(cmd, c
 export function foldersOf(cmd: string, cwd: string, home: string): string[] {
   const text = pieces(cmd).join('\n')
   const paths = [
-    ...[...text.matchAll(/(?:^|[\s=])(["'])((?:~|\/)[^"']*)\1/g)].map(m => m[2]),
-    ...[...text.matchAll(/(?:^|[\s=])((?:~|\/)[^\s'";|&)<>]*)/g)].map(m => m[1]),
+    ...[...text.matchAll(/(?:^|[\s=])(["'])((?:~|\/|[a-z]:[\\/])[^"']*)\1/gi)].map(m => m[2]),
+    ...[...text.matchAll(/(?:^|[\s=])((?:~|\/|[a-z]:[\\/])[^\s'";|&)<>]*)/gi)].map(m => m[1]),
   ].map(p => resolve(p, cwd, home))
   return [...new Set([resolve(cwd, '/', home), ...cdsOf(cmd, cwd, home), ...paths])]
 }
@@ -217,6 +225,14 @@ export function decide(cmd: string, cwd: string, home: string, d: Data, root: st
   if (command || context.length) return { command, context }
 }
 
+// The aws CLI's own error lines word for word (botocore, 2.38), so a log line that only shares a phrase does not trip it.
+// shortcut: SSO role errors (UnauthorizedException on GetRoleCredentials) are not listed, add them if an SSO profile comes back.
+const SIGNED_OUT = new RegExp(
+  String.raw`^\s*(?:aws: \[ERROR\]: )?(?:(?:An error occurred \(NoCredentials\): )?(?:Your session has expired\. Please reauthenticate using|Unable to locate credentials\. You can configure credentials by running|Error loading SSO Token: Token for \S+ does not exist|Error when retrieving token from \S+: Token has expired|The SSO session associated with this profile has expired or is otherwise invalid)` +
+  String.raw`|An error occurred \(ExpiredToken(?:Exception)?\) when calling the \w+ operation: )`, 'm')
+/** True when aws output says the session is expired or there are no credentials. */
+export const signedOut = (out: string) => SIGNED_OUT.test(out)
+
 const isObj = (v: unknown): v is Record<string, any> => typeof v === 'object' && v !== null && !Array.isArray(v)
 async function json($: EngineInterface, path: string): Promise<Record<string, any>> {
   try { const v = JSON.parse(String(await $.fs.read(path))); return isObj(v) ? v : {} } catch { return {} }
@@ -232,7 +248,7 @@ async function repoTop($: EngineInterface, folder: string, home: string) {
 
 export const register: Register = on => {
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
-    const home = ((await $.env.get('HOME')) ?? '').replace(/\/+$/, '')
+    const home = ((await $.env.get('HOME')) ?? (await $.env.get('USERPROFILE')) ?? '').replace(/[\\/]+$/, '')
     const dir = (await $.env.get('ACCOUNT_GUARD_DIR')) || `${home}/.claude/switchboard`
     const logins = await json($, `${dir}/logins.json`)
     const apps: App[] = Array.isArray(logins.apps) ? logins.apps.filter((a: unknown) => isObj(a) && typeof a.id === 'string') : []
@@ -246,10 +262,14 @@ export const register: Register = on => {
       links: isObj(logins.links) ? logins.links : {},
       apps, profiles,
     }, $.plugin.root, await repoTop($, targetOf(e.command, cwd, home), home))
-    if (!r) return next(e)
-    if ('deny' in r) return { deny: r.deny }
-    const out = await next(r.command ? { ...e, command: r.command } : e)
+    if (r && 'deny' in r) return { deny: r.deny }
+    const out = await next(r?.command ? { ...e, command: r.command } : e)
     if (out.deny !== undefined) return out
-    return { ...out, context: [...(out.context ?? []), ...r.context] }
+    const profile = /\bAWS_PROFILE=([\w.@+-]+)|--profile[ =]([\w.@+-]+)/.exec(r?.command ?? e.command)
+    const gone = clisOf(e.command, []).includes('aws') && signedOut(out.text ?? '')
+      ? [`account-guard: AWS is signed out${profile ? ` for profile ${profile[1] ?? profile[2]}` : ''}. Skip work that only reads from AWS (prod logs, status probes) and list it as skipped in the standup; do not ask Kenneth to sign in for it. Ask for the login only when the task cannot be done without AWS (a deploy or an AWS change Kenneth asked for).`]
+      : []
+    const context = [...(r?.context ?? []), ...gone]
+    return context.length ? { ...out, context: [...(out.context ?? []), ...context] } : out
   }).catch(($, e, next) => next(e)) // a guard bug never blocks Bash
 }

@@ -207,3 +207,10 @@ test('a limit check that never answers times out and asks', async ($, on) => {
   expect(asked[0]).toMatch(/bland limit check did not answer/)
   expect(JSON.stringify(ran)).toMatch(/paid-guard: Kenneth did not allow/)
 })
+
+test('a failing home lookup never holds a free call, and a paid one stays held naming why', async ($, on) => {
+  on('tool.call', (_, e) => (e.tool === 'AskUserQuestion' ? { deny: 'no one here' } : { result: {} }))
+  on('env.get', () => ({ deny: 'env read failed' }))
+  expect(JSON.stringify(await $.tool.call({ tool: 'Bash', command: 'git status --short | wc -l' } as any))).not.toMatch(/paid-guard/)
+  expect(JSON.stringify(await $.tool.call({ tool: 'Bash', command: 'bland call send --task x' } as any))).toMatch(/guard failed \(\w+/)
+})

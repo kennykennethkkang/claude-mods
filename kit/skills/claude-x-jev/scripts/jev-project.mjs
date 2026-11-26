@@ -76,12 +76,21 @@ export async function decide(state, questions, model, ms) {
 const nouls = (out, questions) => Object.fromEntries(Object.keys(questions).map(q => [q, out?.answers?.[q]?.noul]))
 const barOf = (preset, q, fallback) => Number(preset.thresholds?.[q]?.high ?? fallback)
 
+// gate.jsonl gets a line per tool call; past this it rolls to gate.jsonl.1 (Switchboard reads only the tail)
+const LEDGER_MAX = 4 << 20
+
+/** Appends text; a file already at max moves to <file>.1 first, so the pair stays under about 2 x max. */
+export function appendCapped(file, text, max = LEDGER_MAX) {
+  try { if (fs.statSync(file).size >= max) fs.renameSync(file, `${file}.1`) } catch { /* new file */ }
+  fs.appendFileSync(file, text)
+}
+
 // Run records in the shape jev.py writes, so Switchboard reads hook runs beside chat runs.
 function live(file, rows) {
   if (!fs.existsSync(path.dirname(LIVE))) return
   try {
     fs.mkdirSync(LIVE, { recursive: true })
-    fs.appendFileSync(path.join(LIVE, file), rows.map(r => JSON.stringify(r) + '\n').join(''))
+    appendCapped(path.join(LIVE, file), rows.map(r => JSON.stringify(r) + '\n').join(''), file === 'gate.jsonl' ? LEDGER_MAX : Infinity)
   } catch { /* the run still counts */ }
 }
 const defaultLog = (kind, r) => kind === 'gate'

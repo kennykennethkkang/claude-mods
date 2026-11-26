@@ -1,8 +1,15 @@
 import { expect, test } from 'claude-code/testing'
 
-import { judge, lastTurn, noteTask } from '../hooks/register.ts'
+import { inResearch, isAbsolute, repoPath, shellFor, judge, lastTurn, noteTask } from '../hooks/register.ts'
 
 const line = (o: object) => JSON.stringify(o)
+
+test('Windows drive paths are absolute repo paths', () => {
+  expect(isAbsolute('C:/Users/k/repo/a.ts')).toBe(true)
+  expect(isAbsolute('C:\\Users\\k\\repo\\a.ts')).toBe(true)
+  expect(repoPath('C:\\Users\\k\\repo\\a.ts', 'C:\\Users\\k\\repo')).toBe(true)
+  expect(shellFor('npm test', true)).toEqual(['cmd.exe', '/d', '/s', '/c', 'npm test'])
+})
 const prompt = (text: string) => line({ type: 'user', uuid: `u-${text}`, message: { role: 'user', content: text } })
 const use = (id: string, name: string, input: object) => line({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id, name, input }] } })
 const result = (id: string, text: string, isError = false) => line({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: id, content: text, is_error: isError }] } })
@@ -323,6 +330,11 @@ test('a turn that launched a background agent is waiting', () => {
   expect(judge(fg, 'Working.', []).block).toBe(true)
 })
 
+test('a Code Mode agent launch, empty result block and the launch in toolUseResult, counts as running', () => {
+  const launch = JSON.stringify({ type: 'user', isVirtual: true, toolUseResult: { isAsync: true, status: 'async_launched' }, message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'repl_a', content: '', is_error: false }] } })
+  expect(lastTurn([prompt('x'), edit('e1'), result('e1', 'ok'), use('repl_a', 'Agent', { prompt: 'p' }), launch].join('\n')).bg).toBe(true)
+})
+
 test('verified edits with no closing question are held once for the finish steps', () => {
   const t = lastTurn([prompt('x'), edit('e1'), result('e1', 'ok'), run('b1', 'npm test'), result('b1', 'ok')].join('\n'))
   const v = judge(t, 'All done.', [])
@@ -416,4 +428,64 @@ test('a transcript it cannot find stamps nothing, not a false Verified', async (
   await $.tool.call({ tool: 'AskUserQuestion', ...CLOSE } as never)
   expect(Object.keys(r.files)).toEqual([])
   expect(r.order).toEqual(['asked'])
+})
+
+test('a research chat is not held for checks or the finish steps', () => {
+  const t = lastTurn([prompt('x'), edit('e1'), result('e1', 'ok')].join('\n'))
+  expect(judge(t, 'Found three.', []).block).toBe(true)
+  const v = judge(t, 'Found three.', [], true, true)
+  expect(v.block).toBe(false)
+  expect(v.verified).toBe(true)
+  const checked = lastTurn([prompt('x'), edit('e1'), result('e1', 'ok'), run('b1', 'npm test'), result('b1', 'ok')].join('\n'))
+  expect(judge(checked, 'All done.', [], true, true).block).toBe(false)
+})
+
+test('a research chat is still held for open tasks and a failed check it calls a pass', () => {
+  const t = lastTurn([prompt('x'), edit('e1'), result('e1', 'ok')].join('\n'))
+  expect(judge(t, 'Done.', [{ subject: 'Read the paper', status: 'in_progress' }], true, true).block).toBe(true)
+  const failed = lastTurn([prompt('x'), edit('e1'), result('e1', 'ok'), run('b1', 'npm test'), result('b1', 'FAIL', true)].join('\n'))
+  expect(judge(failed, 'All tests pass, fixed.', [], true, true).block).toBe(true)
+})
+
+test('the research folder is Documents/Research under the home folder', () => {
+  expect(inResearch('/h/Documents/Research', '/h')).toBe(true)
+  expect(inResearch('/h/Documents/Research/', '/h/')).toBe(true)
+  expect(inResearch('/h/Documents/Research/agents/notes', '/h')).toBe(true)
+  expect(inResearch('C:\\Users\\k\\Documents\\Research\\a', 'C:\\Users\\k')).toBe(true)
+  expect(inResearch('/h/Documents/Research2', '/h')).toBe(false)
+  expect(inResearch('/h/Documents/GitHub/app', '/h')).toBe(false)
+  expect(inResearch('/h/Documents', '/h')).toBe(false)
+  expect(inResearch('/Documents/Research', '')).toBe(false)
+  expect(inResearch('', '/h')).toBe(false)
+})
+
+test('Stop in the research folder is not held, one outside it still is', async ($, on) => {
+  const files: Record<string, string> = {}
+  const at = (dir: string) => [prompt('survey'), use('e1', 'Edit', { file_path: `${dir}/n.md`, old_string: 'a', new_string: 'b' }), result('e1', 'ok')].join('\n')
+  let tail = at('/h/Documents/Research/ai')
+  on('env.get', (_, e) => ({ value: e.name === 'HOME' ? '/h' : undefined }))
+  on('process.run', () => ({ value: { exitCode: 0, stdout: tail, stderr: '' } }))
+  on('fs.write', (_, e) => { files[e.path] = e.text; return { value: undefined } })
+  on('classic.Stop', () => ({}))
+  const stop = (id: string, cwd: string) => $.classic.Stop({ session_id: id, transcript_path: '/t.jsonl', cwd, stop_hook_active: false, last_assistant_message: 'Done.' })
+  expect((await stop('r1', '/h/Documents/Research/ai')).block).toBeUndefined()
+  expect(JSON.parse(files['/h/.claude/switchboard/done-check/r1.json'] ?? '{}').verified).toBe(true)
+  tail = at('/h/Documents/Research2')
+  expect((await stop('r2', '/h/Documents/Research2')).block).toMatch(/done-check/)
+})
+
+test('a lead reply with an em dash or a commit trailer holds the stop, even with no edits', () => {
+  const t = lastTurn([prompt('x'), say('hi')].join('\n'))
+  const em = String.fromCharCode(0x2014)
+  expect(judge(t, `Done ${em} all set.`, []).block).toBe(true)
+  expect(judge(t, `Done ${em} all set.`, []).reason).toMatch(/em dash/)
+  const msg = 'Commit message:\n\n\`\`\`\nFix x\n\n- y\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n\`\`\`'
+  expect(judge(t, msg, []).reason).toMatch(/trailer/)
+  expect(judge(t, msg.replace('Co-Authored-By: Claude <noreply@anthropic.com>', 'Generated with [Claude Code](https://claude.com/claude-code)'), []).block).toBe(true)
+  expect(judge(t, msg.replace('Co-Authored-By: Claude <noreply@anthropic.com>', String.fromCodePoint(0x1f916) + ' Generated with Claude Code'), []).block).toBe(true)
+  expect(judge(t, 'Done.\nfoo Generated with Claude Code', []).block).toBe(false)
+  // Subagent reports go to the lead, not to Kenneth.
+  expect(judge(t, `Done ${em} all set.`, [], false).block).toBe(false)
+  expect(judge(t, 'Done, all set. No Co-Authored-By trailer was added.', []).block).toBe(false)
+  expect(judge(t, 'Approve this chat as finished?', []).block).toBe(false)
 })

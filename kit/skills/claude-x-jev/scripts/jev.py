@@ -53,6 +53,7 @@ def die(msg, code=1):
 # Switchboard draws runs live from one JSON line per decision, never the item's text.
 LIVE_DIR = os.path.join(os.path.expanduser("~"), ".claude", "switchboard", "jev")
 LIVE_KEEP = 50
+LEDGER_MAX = 4 << 20
 _live_lock = threading.Lock()
 
 
@@ -60,8 +61,12 @@ def live_write(path, obj):
     if not path:
         return
     try:
-        with _live_lock, open(path, "a", encoding="utf-8") as fh:
-            fh.write(json.dumps(obj, ensure_ascii=False) + "\n")
+        with _live_lock:
+            # the gate ledger rolls to .1 past 4 MB, like jev-project.mjs appendCapped
+            if os.path.basename(path) == "gate.jsonl" and os.path.exists(path) and os.path.getsize(path) >= LEDGER_MAX:
+                os.replace(path, path + ".1")
+            with open(path, "a", encoding="utf-8") as fh:
+                fh.write(json.dumps(obj, ensure_ascii=False) + "\n")
     except OSError:
         pass
 

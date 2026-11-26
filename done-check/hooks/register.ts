@@ -14,7 +14,17 @@ const OUTSIDE = /(^|\/)\.switchboard\//
 const FINISH = 'run the aar skill, print the standup (done, for you, left, risks), then ask "Approve this chat as finished?"'
 
 // Windows paths: forward slashes, drive letter as a lowercase first segment.
-const slashes = (p: string) => p.replace(/\\/g, '/').replace(/^([a-zA-Z]):(?=\/|$)/, (_, d) => `/${d.toLowerCase()}:`)
+const slashes = (p: string) => p.replace(/\\/g, '/')
+export const isAbsolute = (p: string) => p.startsWith('/') || /^[a-z]:\//i.test(p.replace(/\\/g, '/'))
+export const shellFor = (command: string, windows: boolean) => windows ? ['cmd.exe', '/d', '/s', '/c', command] : ['/bin/sh', '-c', command]
+
+/** Whether cwd is ~/Documents/Research or inside it: those chats end on a finding, so no check or finish steps are asked of them. */
+export function inResearch(cwd: string, home: string): boolean {
+  if (!cwd || !home) return false
+  const root = `${slashes(home).replace(/\/+$/, '')}/documents/research`.toLowerCase()
+  const c = slashes(cwd).replace(/\/+$/, '').toLowerCase()
+  return c === root || c.startsWith(`${root}/`)
+}
 
 /** Normalised absolute path, or undefined when it has a shell variable or no cwd to resolve against. */
 function resolvePath(raw: string, cwd: string): string | undefined {
@@ -24,14 +34,14 @@ function resolvePath(raw: string, cwd: string): string | undefined {
   p = p.replace(/^(\$TMPDIR|\$\{TMPDIR\})(?=\/|$)/, tmp.replace(/\/+$/, ''))
   if (/^(~|\$HOME|\$\{HOME\})(\/|$)/.test(p)) p = p.replace(/^(~|\$HOME|\$\{HOME\})/, home || '/~')
   if (p.includes('$') || p.includes('`')) return undefined
-  if (!p.startsWith('/')) { if (!cwd) return p; p = `${cwd}/${p}` }
+  if (!isAbsolute(p)) { if (!cwd) return p; p = `${cwd}/${p}` }
   const out: string[] = []
   for (const seg of p.split('/')) { if (seg === '..') out.pop(); else if (seg && seg !== '.') out.push(seg) }
-  return `/${out.join('/')}`
+  return /^[a-z]:$/i.test(out[0] ?? '') ? `${out.shift()}/${out.join('/')}` : `/${out.join('/')}`
 }
 
 /** Whether a write to this path is repo work: inside the cwd, not under .switchboard. Unresolvable counts. */
-function repoPath(raw: string, cwd: string): boolean {
+export function repoPath(raw: string, cwd: string): boolean {
   if (!raw || raw === '/dev/null') return false
   raw = slashes(raw)
   if (OUTSIDE.test(raw)) return false
@@ -39,7 +49,9 @@ function repoPath(raw: string, cwd: string): boolean {
   if (p === undefined) return true
   if (OUTSIDE.test(p)) return false
   const base = slashes(cwd).replace(/\/+$/, '')
-  return !base || p === base || p.startsWith(`${base}/`)
+  const win = /^[a-z]:\//i.test(base)
+  const target = win ? p.toLowerCase() : p, root = win ? base.toLowerCase() : base
+  return !root || target === root || target.startsWith(`${root}/`)
 }
 
 // argv[1] of `node -e code a b` and `python3 -c code a b` is a; unknown when the line has no such args.
@@ -99,6 +111,12 @@ const HELD = 'Paused by usage-meter'
 const HANDOFF = /\bhand(ing|ed)? ?off\b|\bhandoff\b|next chat/i
 const APPROVAL = /\b(approve|approval|sign off|look good|ok to ship|ready to commit)\b/i
 const CLOSING = 'Approve this chat as finished'
+const EM = String.fromCharCode(0x2014)
+const TRAILER = /^\s*(co-authored-by:|(\p{Extended_Pictographic}\s*)?generated with \[?claude code)/imu
+
+/** The reply rules a hook can read off the lead's last message. */
+export const replyTell = (last: string) => last.includes(EM) ? 'The reply has an em dash: use a comma, a colon, or "to", and send it again.'
+  : TRAILER.test(last) ? 'The commit message has an attribution trailer (Co-Authored-By or Generated with): drop it and send it again.' : undefined
 
 /** The last turn from a transcript tail: from the last prompt Kenneth (or the lead) typed. */
 export function lastTurn(tail: string, cwd = ''): Turn {
@@ -137,7 +155,8 @@ export function lastTurn(tail: string, cwd = ''): Turn {
       } else if (b?.type === 'tool_result') {
         // Only a denied call that opens with the denial: a grep or diff can show the same text.
         const said = typeof b.content === 'string' ? b.content : Array.isArray(b.content) ? String(b.content.find((x: { type?: string }) => x?.type === 'text')?.text ?? '') : ''
-        if (/Async agent launched/.test(said)) t.bg = true
+        // Code Mode leaves an inner call's result block empty; the launch sits in toolUseResult.
+        if (/Async agent launched/.test(said) || (r as { toolUseResult?: { status?: unknown } }).toolUseResult?.status === 'async_launched') t.bg = true
         const refused = b.is_error === true && DENIED.test(said.trimStart())
         if (refused) denied.add(b.tool_use_id)
         else if (checks.has(b.tool_use_id)) t.checkFailed = b.is_error === true
@@ -152,20 +171,23 @@ export function lastTurn(tail: string, cwd = ''): Turn {
 }
 
 /** Whether to hold the stop, and what is missing either way. */
-export function judge(t: Turn, last: string, tasks: Task[], main = true) {
+export function judge(t: Turn, last: string, tasks: Task[], main = true, research = false) {
   const missing: string[] = []
   const open = tasks.filter(x => x.status !== 'completed' && x.status !== 'deleted')
   if (open.length) missing.push(`open tasks: ${open.map(x => x.subject).join('; ')}`)
-  if (t.edited && t.lastEdit > t.lastCheck) missing.push('files were edited after the last test, lint or typecheck run')
+  if (!research && t.edited && t.lastEdit > t.lastCheck) missing.push('files were edited after the last test, lint or typecheck run')
   if (t.edited && t.lastCheck >= 0 && t.checkFailed && CLAIM.test(last)) missing.push('the message claims success but the last check failed')
   const question = /\?\s*$/.test(last.trim()) && !APPROVAL.test(last)
   // No ask tool in the session (it never loads): the closing question asked as text counts.
   // ponytail: the tool list sits outside the tail, so text alone counts; check it if chats start skipping the tool.
   const waiting = t.asked || last.includes(CLOSING) || t.bg === true || t.held === true || question || LIMIT.test(last) || HANDOFF.test(last)
   // Edited, checked, but never asked the closing question: hold once for the finish steps.
-  const unclosed = main && t.edited && !waiting && missing.length === 0
-  const reason = missing.length ? `${missing.join('. ')}. Finish it and run the checks, or say what is blocking.` : `${FINISH}.`
-  return { block: t.edited && !waiting && (missing.length > 0 || unclosed), verified: missing.length === 0, waiting, missing, reason }
+  const unclosed = main && !research && t.edited && !waiting && missing.length === 0
+  const base = missing.length ? `${missing.join('. ')}. Finish it and run the checks, or say what is blocking.` : `${FINISH}.`
+  const held = t.edited && !waiting && (missing.length > 0 || unclosed)
+  const tell = main ? replyTell(last) : undefined
+  const reason = held ? `${base}${tell ? ` ${tell}` : ''}` : tell ?? base
+  return { block: held || Boolean(tell), verified: missing.length === 0, waiting, missing, reason }
 }
 
 /** Keeps a task list current from its own tool calls; TodoWrite replaces it whole. */
@@ -216,7 +238,7 @@ async function goalCheck($: EngineInterface, cwd: string, edit: string): Promise
   const command = goal?.match(/^Check: `([^`\n]+)`/m)?.[1].trim()
   if (!command) return
   try {
-    const r = await $.process.run(['/bin/sh', '-c', command], { cwd: root, timeoutMs: 600_000 })
+    const r = await $.process.run(shellFor(command, (await $.env.get('OS')) === 'Windows_NT'), { cwd: root, timeoutMs: 600_000 })
     if (r.exitCode === 0) {
       await $.store.set(cacheKey, edit).catch(() => undefined)
       return
@@ -237,7 +259,8 @@ async function tail($: EngineInterface, path: string) {
 type Status = { session: string; agent?: string; verified: boolean; state: string; missing: string[]; edited: boolean; blocks: number; at: number }
 async function verdict($: EngineInterface, transcript: string, owner: string, last: string, cwd = '', main = true) {
   const t = lastTurn(await tail($, transcript), cwd)
-  return { t, v: judge(t, last, [...(await taskList($, owner)).mine.values()], main) }
+  const home = (await $.env.get('HOME')) ?? (await $.env.get('USERPROFILE')) ?? ''
+  return { t, v: judge(t, last, [...(await taskList($, owner)).mine.values()], main, inResearch(cwd, home)) }
 }
 
 async function writeStatus($: EngineInterface, s: Status) {

@@ -11,8 +11,12 @@ const segments = (c: string) => c.split(/;|&&|\|\||[&|\n()`]|\$\(/)
 // ~, $HOME, ${HOME} to the home folder; trailing / and /* dropped.
 function resolve(p: string, w: Where): string {
   const home = w.home ?? '~'
-  let r = p.replace(/^(~|\$\{?HOME\}?)(?=\/|$)/, home)
-  if (!r.startsWith('/') && !r.startsWith('~')) r = `${w.cwd ?? '.'}/${r}`
+  let r = p.replace(/^(~|\$\{?HOME\}?|\$env:USERPROFILE|%USERPROFILE%)(?=[/\\]|$)/i, home)
+    .replace(/^(?:\$env:(?:HOMEDRIVE|SYSTEMDRIVE)|%(?:HOMEDRIVE|SYSTEMDRIVE)%)(?=[/\\]|$)/i, 'C:').replace(/\\/g, '/')
+  if (/^[a-z]:\/?$/i.test(r)) return `/${r[0].toLowerCase()}:`
+  if (/^[a-z]:\//i.test(r)) r = `/${r[0].toLowerCase()}:${r.slice(2)}`
+  if (/^\/[a-z]$/i.test(r)) return r.toLowerCase()
+  if (!r.startsWith('/') && !r.startsWith('~') && !/^[a-z]:\//i.test(r)) r = `${(w.cwd ?? '.').replace(/\\/g, '/')}/${r}`
   const out: string[] = []
   for (const part of r.split('/')) {
     if (part === '' || part === '.' || part === '*') continue
@@ -22,13 +26,18 @@ function resolve(p: string, w: Where): string {
   return r.startsWith('~') ? out.join('/') : `/${out.join('/')}`
 }
 
-// /, /Users, the home folder, ~/Documents, ~/Documents/GitHub (any user's, and the literal ~ forms).
-const PROTECTED = /^(\/|\/Users|\/Users\/[^/]+(\/Documents(\/GitHub)?)?|~(\/Documents(\/GitHub)?)?|(.*\/)?Documents\/GitHub)$/
+// /, drive roots, the home folder and ~/Documents/GitHub.
+const PROTECTED = /^(\/|\/[a-z]|\/[a-z]\/Users\/[^/]+(\/Documents(\/GitHub)?)?|\/Users|\/Users\/[^/]+(\/Documents(\/GitHub)?)?|~(\/Documents(\/GitHub)?)?|(.*\/)?Documents\/GitHub)$/i
 const isProtected = (p: string, w: Where) => {
   // A relative path with no known cwd is judged as written.
-  if (!w.cwd && !/^(\/|~|\$\{?HOME)/.test(p)) return PROTECTED.test(p.replace(/\/\*?$/, ''))
+  const input = p.replace(/\\/g, '/').replace(/\/\*(?:\.\*)?$/, '/')
+  if (/^\/[a-z]:$/.test(resolve(input, w).toLowerCase())) return true
+  if (!w.cwd && !/^(\/|[a-z]:[\\/]|~|\$\{?HOME|\$env:USERPROFILE|%USERPROFILE%)/i.test(input)) return PROTECTED.test(input)
   const r = resolve(p, w)
-  return PROTECTED.test(r) || (!!w.home && [w.home, `${w.home}/Documents`, `${w.home}/Documents/GitHub`].includes(r))
+  const low = r.toLowerCase()
+  const home = (w.home ?? '').replace(/\\/g, '/').replace(/^[a-z]:/i, m => `/${m[0].toLowerCase()}:`).replace(/\/$/, '').toLowerCase()
+  const parent = home.match(/^\/[a-z]:\/users\/[^/]+$/) ? home.slice(0, home.lastIndexOf('/')) : ''
+  return PROTECTED.test(r) || (!!home && [home, `${home}/documents`, `${home}/documents/github`, parent].includes(low))
 }
 
 // Walks the segments in order so an earlier cd moves where . and * point.
@@ -44,6 +53,11 @@ function wideDelete(command: string, w: Where) {
       const rest = t.slice(ri + 1)
       if (rest.some(x => RM_FLAG.test(x)) && rest.filter(x => !x.startsWith('-')).some(x => isProtected(x, at))) return true
     }
+    const wi = t.findIndex(x => /^(remove-item|ri|rm|del|erase|rmdir|rd)$/i.test(x.replace(/\.exe$/i, '')))
+    const args = wi < 0 ? [] : t.slice(wi + 1).flatMap(x => /^\/(?:[a-z]+\/)+[a-z]+$/i.test(x) ? x.split(/(?=\/)/).filter(Boolean) : [x])
+    const recursive = (x: string) => /^\/s$/i.test(x) || /^-r(?:e(?:c(?:u(?:r(?:s(?:e)?)?)?)?)?)?(?::\$true)?$/i.test(x)
+    if (wi >= 0 && args.some(recursive)
+      && args.filter(x => !/^[-/]/.test(x)).some(x => isProtected(x, at))) return true
     const fi = t.indexOf('find')
     if (fi >= 0 && (t.includes('-delete') || /-exec(dir)?\s+(\S*\/)?rm\b/.test(seg))) {
       const roots = []
@@ -58,7 +72,7 @@ function wideDelete(command: string, w: Where) {
 function forceMain(command: string) {
   return segments(command).some(seg => {
     const t = words(seg)
-    let i = t.indexOf('git') + 1
+    let i = t.findIndex(x => /(?:^|[\\/])git(?:\.exe|\.cmd)?$/i.test(x)) + 1
     if (i === 0) return false
     while (t[i]?.startsWith('-')) i += t[i] === '-C' || t[i] === '-c' ? 2 : 1
     if (t[i] !== 'push') return false
@@ -90,6 +104,8 @@ const pipedDownload = (c: string) => /\b(ba|z)?sh\b[^;&\n]*(\$\(|<\()\s*(curl|wg
 
 export const HARD: { test: (c: string, w: Where) => boolean; why: string }[] = [
   { test: wideDelete, why: 'rm -r or find -delete of /, the home folder, ~/Documents or ~/Documents/GitHub' },
+  { test: c => /\b(?:Format-Volume|Clear-Disk)\b/i.test(c) || /(?:^|[;&|(]\s*|\/c\s+"?|-c(?:ommand)?\s+["']?)format(?:\.com)?(?:\s+\/\S+)*\s+[a-z]:/i.test(c), why: 'a disk erase or raw disk write' },
+  { test: c => /(?:^|[\s;&|])diskpart(?:\.exe)?(?:\s|$)/i.test(c), why: 'a disk erase or raw disk write' },
   { test: c => /(^|[\s;&|(`"'])sudo\b/.test(c), why: 'sudo' },
   { test: pipedDownload, why: 'a download piped into a shell' },
   { test: forceMain, why: 'a force push to main or master' },
@@ -111,7 +127,7 @@ async function askOn($: EngineInterface): Promise<boolean> {
   const now = await $.clock.now().catch(() => 0)
   if (now - cache.at < READ_MS) return cache.on
   cache.at = now
-  const home = ((await $.env.get('HOME').catch(() => undefined)) ?? (await $.env.get('USERPROFILE').catch(() => undefined)) ?? '').replace(/\\/g, '/')
+  const home = ((await $.env.get('HOME').catch(() => undefined)) ?? (await $.env.get('USERPROFILE').catch(() => undefined)) ?? systemHome()).replace(/\\/g, '/')
   try { cache.on = JSON.parse(String(await $.fs.read(`${home}/.claude/switchboard/ask-mode.json`))).claude === true } catch { cache.on = false }
   return cache.on
 }
@@ -127,21 +143,29 @@ async function note($: EngineInterface, e: { permission_mode?: unknown; session_
   return next(e as never)
 }
 
+const commandOf = (e: unknown) => String((e as { command?: unknown }).command ?? '')
+const systemHome = () => (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.HOME
+  ?? (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.USERPROFILE ?? ''
+
 export const register: Register = on => {
   on('classic.UserPromptSubmit', note as never).catch(($, e, next) => next(e))
   on('classic.PostToolUse', note as never).catch(($, e, next) => next(e))
 
+  // Pure check first, so the .catch can re-judge without $: a failure there never holds a clean call.
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
-    const w = { cwd: await $.session.cwd().catch(() => undefined), home: await $.env.get('HOME').catch(() => undefined) }
-    const why = hardDeny(String((e as unknown as { command?: unknown }).command ?? ''), w)
+    const command = commandOf(e)
+    const home = (await $.env.get('HOME').catch(() => undefined)) ?? (await $.env.get('USERPROFILE').catch(() => undefined)) ?? systemHome()
+    const why = hardDeny(command) ?? hardDeny(command, { cwd: await $.session.cwd().catch(() => undefined), home })
     return why ? { deny: `bash-approve: always refused (${why}). Do it another way or ask Kenneth to run it.` } : next(e)
-  }).catch(($, e, next) => (next.called ? next(e) : { deny: 'bash-approve: the check failed, so the call was held.' }))
+  }).catch(($, e, next) => (next.called || !hardDeny(commandOf(e)) ? next(e)
+    : { deny: `bash-approve: the check failed (${next.error.kind}${next.error.message ? `: ${next.error.message}` : ''}), so the call was held.` }))
 
   // Core's verdict first: a deny stands, and so does an ask from a settings rule or with Ask before actions on. Other asks become an allow, but only in a mode that does not prompt; default, plan or an unknown mode keep the ask.
   on('tool.check', { tool: 'Bash' }, async ($, e, next) => {
     const v = await next(e)
     if (v.decision === 'deny') return v
-    const w = { cwd: await $.session.cwd().catch(() => undefined), home: await $.env.get('HOME').catch(() => undefined) }
+    const home = (await $.env.get('HOME').catch(() => undefined)) ?? (await $.env.get('USERPROFILE').catch(() => undefined)) ?? systemHome()
+    const w = { cwd: await $.session.cwd().catch(() => undefined), home }
     const why = hardDeny(String((e.input as { command?: unknown })?.command ?? ''), w)
     if (why) return { decision: 'deny', reason: `bash-approve: always refused (${why}).` }
     const mode = modes.get(String(await $.session.id().catch(() => '')))

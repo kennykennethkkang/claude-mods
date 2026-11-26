@@ -15,7 +15,7 @@ import * as nodeModule from 'node:module'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { CODEX_AGENT_HEADER, codexAgent, codexGuardFiles, codexRoleNames, mergeCodexHooks, exportManifest, exportSkills, isSecretFile, keyLine, launchAgent, mergeSettings, newestVsix, pathRules, PATH_RULE_MARK, planSetup, RC_LABEL, rcLogin, RULES_HEADER, rulesAction, rulesTargets, withPathRules, startupFile, startupVbs, withDeny } from './kit.mjs'
+import { CODEX_AGENT_HEADER, codexAgent, codexGuardFiles, codexRoleNames, mergeCodexHooks, exportManifest, exportSkills, isSecretFile, keyLine, launchAgent, mergeSettings, newestVsix, pathRules, PATH_RULE_MARK, planSetup, RC_IDLE_LABEL, RC_LABEL, rcLogin, RULES_HEADER, rulesAction, rulesTargets, withPathRules, startupFile, startupVbs, withDeny, releaseChecksumMatches } from './kit.mjs'
 
 const KIT = dirname(fileURLToPath(import.meta.url))
 const CLAUDE = join(homedir(), '.claude')
@@ -80,13 +80,36 @@ function run(cmd, args) {
   return r.status === 0
 }
 
-function setup(dry) {
+async function downloadLatestVsix() {
+  const api = await fetch('https://api.github.com/repos/kennykennethkkang/switchboard/releases/latest', { headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'Switchboard setup' } })
+  if (!api.ok) throw new Error(`Could not read the latest Switchboard release (${api.status})`)
+  const release = await api.json()
+  const version = release.tag_name.replace(/^v/, '')
+  const name = `switchboard-${version}.vsix`
+  const vsix = release.assets.find(asset => asset.name === name)
+  const checksum = release.assets.find(asset => asset.name === `${name}.sha256`)
+  if (!vsix || !checksum) throw new Error(`Release ${release.tag_name} has no VSIX and checksum pair`)
+  // only GitHub's own download hosts, over https
+  const hosts = new Set(['github.com', 'objects.githubusercontent.com', 'release-assets.githubusercontent.com'])
+  const ok = u => { try { const x = new URL(u); return x.protocol === 'https:' && hosts.has(x.hostname) } catch { return false } }
+  if (![vsix, checksum].every(a => ok(a.browser_download_url))) throw new Error('Refused a release asset outside github.com')
+  const [binary, sum] = await Promise.all([fetch(vsix.browser_download_url), fetch(checksum.browser_download_url)])
+  if (!binary.ok || !sum.ok || ![binary, sum].every(r => ok(r.url))) throw new Error(`Could not download Switchboard ${version}`)
+  const bytes = Buffer.from(await binary.arrayBuffer())
+  if (!releaseChecksumMatches(bytes, await sum.text())) throw new Error(`Checksum mismatch for Switchboard ${version}`)
+  const target = join(KIT, name)
+  writeFileSync(target, bytes, { flag: 'wx', mode: 0o600 })
+  return name
+}
+
+async function setup(dry) {
   const m = readJson(join(KIT, 'manifest.json'), null)
   if (!m) {
     console.error('No manifest.json here: run node kit/setup.mjs --export on the machine you are copying from, then push the kit.')
     process.exit(1)
   }
-  const vsix = newestVsix(list(KIT))
+  let vsix = newestVsix(list(KIT))
+  if (!dry && !vsix) vsix = await downloadLatestVsix()
   const steps = planSetup(m, { kit: KIT.replace(/\\/g, '/'), vsix, kitSkills: listDirs(join(KIT, 'skills')) })
   if (!dry && !run('claude', ['--version'])) {
     console.error('Install Claude Code first (https://claude.com/claude-code), sign in, then run this again.')
@@ -262,6 +285,10 @@ function installRc() {
   writeFileSync(plist, launchAgent(node, join(KIT, 'rc-servers.mjs')))
   console.log(`> Remote Control LaunchAgent at ${plist}`)
   if (!run('launchctl', ['load', '-w', plist])) console.log('  launchctl load failed: run it by hand')
+  const idle = join(dirname(plist), `${RC_IDLE_LABEL}.plist`)
+  if (existsSync(idle)) spawnSync('launchctl', ['unload', idle])
+  writeFileSync(idle, launchAgent(node, join(KIT, 'rc-servers.mjs'), { label: RC_IDLE_LABEL, args: ['--idle'], every: 3600 }))
+  if (!run('launchctl', ['load', '-w', idle])) console.log('  launchctl load failed for the idle sweep: run it by hand')
   // At login the agent opens rc-servers.mjs inside ~/Documents, which macOS holds until node is allowed there.
   console.log(`  Give node access to your Documents folder: System Settings > Privacy & Security > Files and Folders (or Full Disk Access) > node (${node}).
   The server runs in ~/Documents/GitHub; node ${join(KIT, 'rc-servers.mjs')} marks that folder trusted and says if it still refuses.`)
@@ -277,10 +304,20 @@ function installRcWindows() {
   if (spawnSync(process.execPath, [join(KIT, 'rc-servers.mjs')], { stdio: 'inherit', windowsHide: true }).status !== 0) console.log(`  could not start it now: run node ${join(KIT, 'rc-servers.mjs')} by hand`)
 }
 
-if (flags.has('--export')) exportKit()
+const KNOWN = ['--dry-run', '--export', '--rules-only', '--agents-only', '--codex-hooks-only', '--permissions-only', '--rc-only']
+const unknown = [...flags].filter(f => !KNOWN.includes(f))
+if (unknown.length) {
+  // The usage lines are the comment at the top of this file.
+  console.log(readFileSync(fileURLToPath(import.meta.url), 'utf8').split('\n').filter(l => l.startsWith('//   node kit/setup.mjs')).map(l => l.slice(5)).join('\n'))
+  const bad = unknown.filter(f => f !== '--help' && f !== '-h')
+  if (bad.length) { console.error(`Unknown flag: ${bad.join(', ')}`); process.exitCode = 1 }
+} else if (flags.has('--dry-run') && flags.size > 1) {
+  console.error('--dry-run works only alone')
+  process.exitCode = 1
+} else if (flags.has('--export')) exportKit()
 else if (flags.has('--rules-only')) installRules()
 else if (flags.has('--codex-hooks-only')) installCodexHooks()
 else if (flags.has('--agents-only')) installAgents(readJson(join(KIT, 'manifest.json'), {}).agents ?? [], false)
 else if (flags.has('--permissions-only')) applyPermissions()
 else if (flags.has('--rc-only')) installRc()
-else setup(flags.has('--dry-run'))
+else await setup(flags.has('--dry-run'))

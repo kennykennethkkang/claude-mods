@@ -226,5 +226,7 @@ export const register: Register = on => {
     // Out of credit: check again on the next call instead of waiting out the 10 min.
     if (/\b402\b/.test(JSON.stringify(out))) caps.delete(spend.key)
     return out
-  }).catch(($, e, next) => (next.called ? next(e) : { deny: 'paid-guard: the guard failed, so the call was held.' }))
+  // Re-judge with the pure spendOf: a failure on a free call lets it run, a paid one stays held.
+  }).catch(($, e, next) => (next.called || !spendOf(String(e.tool), e as unknown as Record<string, unknown>) ? next(e)
+    : { deny: `paid-guard: the guard failed (${next.error.kind}${next.error.message ? `: ${next.error.message}` : ''}), so the call was held.` }))
 }

@@ -282,6 +282,30 @@
     ]
   },
   {
+    "id": "worktree-read-and-grep",
+    "target": "rules",
+    "split": "heldout",
+    "prompt": "You are in a worktree chat at .claude/worktrees/skin-fix inside a sample repo. Bash refuses any compound command here ('This session is isolated in the worktree...'). You must read ../../../web/lib/skins/README.md and find every use of skinFor in the web folder. Write the exact Bash tool calls you would make, one per line. Do not run them.",
+    "checklist": [
+      "One plain command per Bash call.",
+      "No ; && || | $( ) or heredoc in any call.",
+      "Uses relative paths such as ../../../web, not an absolute path or a cd.",
+      "Contains no em dash character."
+    ]
+  },
+  {
+    "id": "worktree-three-step-check",
+    "target": "rules",
+    "split": "heldout",
+    "prompt": "You are in a worktree chat in the Switchboard repo. Bash refuses any compound command here ('This session is isolated in the worktree...'). Before finishing you must run a 3-step check: npx tsc --noEmit -p extension, then npm test in extension, then grep the changed files for em dashes. Say in a few lines exactly how you run it. Do not run anything.",
+    "checklist": [
+      "Writes the steps into a script file with the Write tool.",
+      "Runs it with one plain Bash call: sh <file>.",
+      "Does not chain the steps with ; && or | in one Bash call.",
+      "Contains no em dash character."
+    ]
+  },
+  {
     "id": "explore-hub-port",
     "target": "Explore",
     "split": "dev",

@@ -23,6 +23,11 @@ const ROLES = {
 }
 const roles = arg('roles', (CODEX.length ? ['engineer', 'qa'] : Object.keys(ROLES)).join(',')).split(',').filter(r => ROLES[r])
 const REPS = +arg('reps', 1), JOBS = +arg('jobs', 2)
+function pythonRun(args, options) {
+  if (process.platform !== 'win32') return spawnSync('python3', args, options)
+  const result = spawnSync('py', ['-3', ...args], options)
+  return result.error?.code === 'ENOENT' ? spawnSync('python', args, options) : result
+}
 const OUT = path.resolve(arg('out', path.join(os.homedir(), '.claude', 'model-bench')))
 const AGENTS = path.join(os.homedir(), '.claude', 'agents')
 const RESULTS = path.join(OUT, 'results.json')
@@ -106,7 +111,7 @@ function scoreEngineer(task, dir) {
   if (fs.existsSync(path.join(hidden, 'hidden.test.ts'))) {
     ok = tap(spawnSync('node', ['--test', '--test-reporter=tap', 'hidden.test.ts'], { cwd: tmp, encoding: 'utf8', timeout: 300e3 }).stdout)
   } else {
-    const r = spawnSync('python3', ['-W', 'ignore', '-m', 'unittest', 'test_hidden'], { cwd: tmp, encoding: 'utf8', timeout: 600e3 })
+    const r = pythonRun(['-W', 'ignore', '-m', 'unittest', 'test_hidden'], { cwd: tmp, encoding: 'utf8', timeout: 600e3 })
     const ran = +(r.stderr.match(/Ran (\d+) test/)?.[1] ?? 0)
     const bad = [...r.stderr.matchAll(/(?:failures|errors)=(\d+)/g)].reduce((a, m) => a + +m[1], 0)
     ok = Math.max(ran - bad, 0)

@@ -5,7 +5,7 @@ description: Use when the user says "self-improve", "/self-improve", "improve th
 
 # Self-improve
 
-Turns one lesson into one tested edit of one kit file, and hands it to Kenneth. It never applies, commits or pushes anything. Switchboard's Learn automatically applies a run to claude-mods only when the held-out pass rate rises, no item regresses and the target still matches baseline.md; it keeps the old file as previous.md in the run dir and files a to-do with an Undo line.
+Turns one lesson into one tested edit of one kit file, and hands it to Kenneth. It never applies, commits or pushes anything. Switchboard's Learn automatically applies a run to claude-mods only when the held-out pass rate rises, the candidate has at least 30 approved results, no item regresses and the target still matches baseline.md; it keeps the old file as previous.md in the run dir and files a to-do with an Undo line.
 
 ## Never
 
@@ -23,7 +23,7 @@ Turns one lesson into one tested edit of one kit file, and hands it to Kenneth. 
 ## Run
 
 ```
-node <this skill>/scripts/self-improve.mjs --target ~/Documents/GitHub/claude-mods/kit/agents/ops.md --lessons lessons.txt [--budget 3] [--margin 0.1] [--candidate file] [--author-model opus] [--dry-run]
+node <this skill>/scripts/self-improve.mjs --target ~/Documents/GitHub/claude-mods/kit/agents/ops.md --lessons lessons.txt [--budget 10] [--margin 0.1] [--candidate file] [--author-model opus] [--dry-run]
 ```
 
 What it does:
@@ -31,11 +31,11 @@ What it does:
 2. Reflection: one `claude -p --model opus` call writes `candidate.md` from target, lessons and dev tasks. `--candidate` skips this with a hand-written one.
 3. Rejects the candidate if the frontmatter changed, nothing changed, or more than 30 lines changed.
 4. Headless A/B on held-out tasks: `claude -p --setting-sources project`, 2 at a time, variant installed in a scratch workspace. Roles go in `.claude/agents/` and run as the session with `--agent <role>` on the role's own model (a Sonnet main agent tends to answer itself and skip the subagent). Skills go in a `--plugin-dir`, rules in `CLAUDE.md`, both on Sonnet. Bash, Write, Edit and web tools are off.
-   One run per task per side, so a 1 item margin is thin: add held-out tasks before trusting a narrow accept.
-5. Blind judge per output (Sonnet, fresh context) scores the checklist.
-6. Accepts only if the candidate's pass rate beats baseline by `--margin` (default 10 points) and no checklist item that passed on baseline fails on the candidate. Equal pass rate counts only if cost drops 15% or more and turns do not rise.
+   The whole held-out set reruns until a candidate passing 80% of its items would reach 30 (`runsFor`: 10 items means 4 runs, 13 means 3), so 30 approved never demands a perfect run.
+5. Blind judge per output (Sonnet, fresh context) scores the checklist. `results.json` keeps one row per task and side, every run's pass array back to back.
+6. Accepts only if the candidate has at least 30 approved results (passed checklist items, summed over runs), its pass rate beats baseline by `--margin` (default 10 points), and no checklist item passed fewer times on the candidate than on baseline. Equal pass rate counts only if cost drops 15% or more and turns do not rise. The 30 floor is ChiefGyk3D's rule from department-of-internal-arguments: a persona is a new version only after 30 results its author approved.
 
-Stops: any output with "hit your" (usage limit) ends the run; `--budget` (default $3, summed `total_cost_usd`) ends it; `touch ~/.claude/self-improve.off` is the kill switch, checked before every call.
+Stops: any output with "hit your" (usage limit) ends the run; `--budget` (default $10, summed `total_cost_usd`) ends it; `touch ~/.claude/self-improve.off` is the kill switch, checked before every call.
 
 ## Undo point
 
@@ -51,4 +51,4 @@ Before anything writes to a kit, rules or agent file (a merge, or Learn applying
 
 ## Test
 
-`node --test <this skill>/scripts/self-improve.test.mjs` covers the target guard, frontmatter freeze, diff cap, accept rule and the eval split.
+`node --test <this skill>/scripts/self-improve.test.mjs` covers the target guard, frontmatter freeze, diff cap, accept rule, the 30 result floor, repeated runs and the eval split.

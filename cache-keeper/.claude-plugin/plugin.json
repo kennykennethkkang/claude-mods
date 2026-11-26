@@ -1,7 +1,7 @@
 {
   "name": "cache-keeper",
-  "version": "0.1.0",
-  "description": "Keeps an idle chat's prompt cache warm with a silent ping just before it expires, and shows warm or cold above the prompt and in Switchboard",
+  "version": "0.1.3",
+  "description": "Keeps the prompt cache of an idle chat, or one waiting on an answer, warm with a silent ping just before it expires, and shows warm or cold above the prompt and in Switchboard",
   "author": {
     "name": "Kenneth Kang"
   },
@@ -18,6 +18,12 @@
       "title": "Stop after idle (hours)",
       "description": "Stop pinging once the chat has sat idle this long.",
       "default": 3
+    },
+    "waitHours": {
+      "type": "number",
+      "title": "Stop after an open tool (hours)",
+      "description": "Stop pinging once a question or command has been open this long.",
+      "default": 8
     }
   },
   "license": "MIT"

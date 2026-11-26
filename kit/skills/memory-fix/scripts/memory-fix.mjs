@@ -108,25 +108,29 @@ export function relink(text, from, to) {
 
 function describe(text, file) {
   const get = k => { const r = new RegExp(`^\\s*${k}:\\s*(.+)$`, 'm').exec(/^---\r?\n([\s\S]*?)\r?\n---/.exec(text)?.[1] ?? ''); const v = r?.[1].trim(); return v && !/^[|>]/.test(v) ? v.replace(/^["']|["']$/g, '') : undefined }
-  return { name: get('name') ?? file.replace(/\.md$/, ''), description: get('description') }
+  return { name: get('name') ?? file.replace(/\.md$/, ''), description: get('description'), unproven: get('status')?.toLowerCase() === 'unproven' }
 }
 
-/** MEMORY.md text with lines for missing files dropped and unlisted live notes appended; gone = files about to be moved. */
+const hook = s => (s.length <= 100 ? s : `${s.slice(0, 100).replace(/\s+\S*$/, '')}...`)
+
+/** MEMORY.md text with lines for missing files dropped and unlisted live notes appended; gone = files about to be moved.
+ * Every chat loads the index, so an unproven note has no line until it is proven. */
 export function syncIndex(memDir, gone = new Set()) {
   const idx = path.join(memDir, 'MEMORY.md')
   if (!fs.existsSync(idx)) return undefined
   const text = fs.readFileSync(idx, 'utf8')
   const listed = new Set()
+  const at = f => describe(fs.readFileSync(path.join(memDir, f), 'utf8'), f)
   const keep = text.split('\n').filter(line => {
     const t = /\]\(([^)\s]+\.md)\)/.exec(line)?.[1]
     if (!t || /:\/\//.test(t) || t.startsWith('../') || t.startsWith('/')) return true
     const abs = path.resolve(memDir, t)
     listed.add(abs)
-    return !(path.dirname(abs) === memDir && gone.has(path.basename(abs))) && fs.existsSync(abs)
+    return !(path.dirname(abs) === memDir && gone.has(path.basename(abs))) && fs.existsSync(abs) && !(path.dirname(abs) === memDir && at(t).unproven)
   })
-  const add = fs.readdirSync(memDir).filter(f => f.endsWith('.md') && f !== 'MEMORY.md' && !listed.has(path.resolve(memDir, f)) && !gone.has(f)).sort().map(f => {
-    const { name, description } = describe(fs.readFileSync(path.join(memDir, f), 'utf8'), f)
-    return noDash(`- [${name}](${f}): ${description ?? name}`)
+  const add = fs.readdirSync(memDir).filter(f => f.endsWith('.md') && f !== 'MEMORY.md' && !listed.has(path.resolve(memDir, f)) && !gone.has(f) && !at(f).unproven).sort().map(f => {
+    const { name, description } = at(f)
+    return noDash(`- [](${f}) ${hook(description ?? name)}`)
   })
   const out = [...(add.length && keep.at(-1) === '' ? keep.slice(0, -1) : keep), ...add, ...(add.length && keep.at(-1) === '' ? [''] : [])].join('\n')
   return out === text ? undefined : out
@@ -181,6 +185,7 @@ export function plan(graph, home) {
   for (const [a, b] of h.contradictions) left.push(`contradiction ${P(a)} vs ${P(b)}: supersedes only with same subject and newer evidence, else ask Kenneth`)
   for (const id of h.invalid) left.push(`invalid ${P(id)}: add a description (draft from the body) and metadata.type user|feedback|project|reference`)
   for (const id of h.stale) left.push(`stale ${P(id)}: check against code and git; update, supersede, or report`)
+  for (const id of h.unproven ?? []) left.push(`unproven ${P(id)}: over 14 days; prove it and drop the status line, or move it to archive/`)
   for (const g of h.loops ?? []) left.push(`loop ${g.map(P).join(' <-> ')}: keep the newest, remove the other supersedes lines`)
   for (const id of h.superseded) if (!moved.has(id)) left.push(`superseded ${P(id)}: not moved (loop, no live superseder, or archive/ taken); check by hand`)
   return { actions, left }

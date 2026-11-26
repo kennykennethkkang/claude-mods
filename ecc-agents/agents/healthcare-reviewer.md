@@ -1,6 +1,6 @@
 ---
 name: healthcare-reviewer
-description: Reviews healthcare application code for clinical safety, CDSS accuracy, PHI compliance, and medical data integrity. Specialized for EMR/EHR, clinical decision support, and health information systems.
+description: Clinical safety and PHI review
 tools: Read, Grep, Glob
 model: opus
 ---

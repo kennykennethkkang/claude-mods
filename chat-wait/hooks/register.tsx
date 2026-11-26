@@ -19,6 +19,8 @@ export type HubState = {
   chats: ChatRow[]; progress: Progress[]; live: Live[]; links?: Link[]
   // Kenneth's unlinks, kept five minutes by the hub; a link merely gone is a reload or an ended target.
   archive?: { sessionId: string; approvedAt?: number }[]
+  // Newer Switchboards only: why the project's to-do queue is held.
+  todos?: Record<string, { plan?: { hold?: { kind: string; text: string } } }>
   unlinks?: Unlink[]; pause?: { chats?: { sessionId: string }[] }; waits?: { sessionId: string }[]
 }
 
@@ -27,6 +29,8 @@ const WAIT = 'chats_wait'
 const EDITS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit'])
 const REDISCOVER_MS = 30_000
 const STATE_MS = 10_000
+// HubState's own fields: the whole state is over 1 MB, and every chat asks every 10 s. An older Switchboard sends it all.
+const FIELDS = 'chats,progress,live,links,archive,todos,unlinks,pause,waits'
 const POLL_S = 5
 // A live target with no progress is a reload for this long from when its progress went missing; past it, ended with nothing to show.
 const GRACE_MS = 10 * 60_000
@@ -169,7 +173,7 @@ async function discover($: EngineInterface) {
 
 // $.clock.sleep spends the hook's 10 s budget; a $ call in flight does not, so waits run a sleep process.
 const pause = ($: EngineInterface, s: number) => Promise.resolve().then(() => $.process.run(['sleep', String(s)], { timeoutMs: (s + 5) * 1000 })).catch(() => undefined)
-const bounded = <T>($: EngineInterface, p: Promise<T>) => Promise.race([p, pause($, 3).then(() => undefined)]).catch(() => undefined)
+const bounded = <T,>($: EngineInterface, p: Promise<T>) => Promise.race([p, pause($, 3).then(() => undefined)]).catch(() => undefined)
 
 async function home($: EngineInterface) {
   const cwd = norm(await $.session.cwd())
@@ -180,7 +184,7 @@ async function home($: EngineInterface) {
 async function readState($: EngineInterface): Promise<HubState | undefined> {
   const t = await home($)
   if (!t) return undefined
-  const got = await bounded($, $.http.fetch(`http://127.0.0.1:${t.port}/hub/state`, { headers: { 'X-Switchboard-Token': t.token } }))
+  const got = await bounded($, $.http.fetch(`http://127.0.0.1:${t.port}/hub/state?fields=${FIELDS}`, { headers: { 'X-Switchboard-Token': t.token } }))
   if (!got?.ok) { cache.foundAt = -Infinity; return undefined }
   try { return JSON.parse(got.text) as HubState } catch { return undefined }
 }
@@ -292,9 +296,54 @@ export async function editDenial($: EngineInterface, file: string) {
   return `Another live chat, ${label(peer)}, is editing ${target}. Call chats_wait with chats ["${peer.sessionId}"] and reason "${target}", then re-read the file before editing. Retrying this edit goes ahead without waiting.`
 }
 
+/** The band above the prompt: what this chat waits on, and that its next to-do queues behind it. */
+export function waitBand(s: HubState, self: string, fromTodo: boolean, now: number, cols: number, project = ''): string | undefined {
+  const cut = (line: string) => line.length > cols ? `${line.slice(0, Math.max(cols - 1, 0))}\u2026` : line
+  // todos is keyed by folder path; SWITCHBOARD_TODO carries only its base name.
+  const cwd = norm(s.chats.find(c => c.sessionId === self)?.cwd ?? ''), todos = Object.entries(s.todos ?? {}).map(([k, v]) => [norm(k), v] as const)
+  const keys = todos.map(([k]) => k)
+  const key = keys.find(k => cwd === k || cwd.startsWith(`${k}/`)) ?? keys.find(k => k.split('/').pop() === project)
+  const parts: string[] = []
+  for (const l of (s.links ?? []).filter(x => x.from === self)) {
+    const ids = [...new Set(l.to.map(id => follow(s, id)))].filter(id => !outcomeIn(s, id, now).finished)
+    if (!ids.length) continue
+    const names = ids.map(id => s.chats.find(c => c.sessionId === id)?.name ?? id.slice(0, 8)).join(', ')
+    const file = l.auto ? s.live.find(x => ids.includes(x.sessionId))?.file : undefined
+    parts.push(file ? `${norm(file).split('/').pop()} in ${names}` : names)
+  }
+  const hold = fromTodo && key && parts.length ? todos.find(([k]) => k === key)?.[1]?.plan?.hold : undefined
+  if (hold?.kind === 'waiting' && typeof hold.text === 'string' && hold.text) return cut(hold.text)
+  // The Left lines this chat hands to To-do, one clause after the wait.
+  const mine = s.progress.find(p => p.sessionId === self)
+  const left = mine?.report?.left.length ?? 0
+  const lines: string[] = []
+  if (parts.length) lines.push(`Waiting on ${parts.join(', ')} to finish${fromTodo ? ', then this to-do runs' : ''}`)
+  if (left) lines.push(mine?.state === 'done' ? `Sent ${plural(left, 'line')} to To-do` : `Sends ${plural(left, 'line')} to To-do when it finishes`)
+  return lines.length ? cut(lines.join(' · ')) : undefined
+}
+
+const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`
+
 export const register: Register = on => {
+  let fromTodo = false
+  let project = ''
+
+  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    if (e.props.hasSurvey) return next(e)
+    const s = await cachedState($).catch(() => undefined)
+    const line = s ? waitBand(s, await $.session.id(), fromTodo, await $.clock.now(), e.props.bodyColumns, project) : undefined
+    if (!line) return next(e)
+    const below = await next(e).catch(() => undefined)
+    const { Box, Text } = $.ui.resolve(e)
+    const row = <Text wrap="truncate-end"><Text color="yellow">{'\u25cf'}</Text> <Text dimColor>{line}</Text></Text>
+    return below ? <Box flexDirection="column">{row}{below}</Box> : row
+  })
+
   on('session.start', async ($, e, next) => {
     const started = await next(e)
+    const raw = await $.env.get('SWITCHBOARD_TODO')
+    fromTodo = !!raw
+    try { project = String(JSON.parse(raw ?? '{}').project ?? '') } catch { /* keep empty */ }
     await $.tool.register({
       name: CHECK,
       description: "This project's other live chats: name, AI, state, current task, the file each is editing, and its last report line.",

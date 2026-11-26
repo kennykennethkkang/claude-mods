@@ -1,6 +1,6 @@
 ---
 name: gan-planner
-description: "GAN Harness - Planner agent. Expands a one-line prompt into a full product specification with features, sprints, evaluation criteria, and design direction."
+description: GAN harness, expands a prompt into a spec
 tools: Read, Write, Grep, Glob
 model: sonnet
 color: purple

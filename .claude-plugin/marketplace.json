@@ -51,6 +51,18 @@
     {
       "name": "account-guard",
       "source": "./account-guard"
+    },
+    {
+      "name": "role-rows",
+      "source": "./role-rows"
+    },
+    {
+      "name": "smart-select",
+      "source": "./smart-select"
+    },
+    {
+      "name": "side-pane",
+      "source": "./side-pane"
     }
   ]
 }

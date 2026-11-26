@@ -1,6 +1,6 @@
 ---
 name: bengali-reviewer
-description: Reviews code handling Bengali (Bangla) text for Unicode correctness, proper normalization, script-aware processing, and internationalization best practices. Use when code processes, displays, or stores Bengali text.
+description: Bengali text, Unicode and i18n review
 tools: Read, Grep, Glob
 model: sonnet
 ---

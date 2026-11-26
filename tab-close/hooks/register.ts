@@ -24,6 +24,9 @@ const KINDS: Record<string, Kind> = {
 type Block = { type?: string; id?: string; name?: string; input?: Record<string, unknown>; tool_use_id?: string; content?: unknown }
 const text = (c: unknown): string => typeof c === 'string' ? c : Array.isArray(c) ? c.map(x => typeof x?.text === 'string' ? x.text : '').join('\n') : ''
 
+// Code Mode leaves an inner call's result block empty; the output sits in the row's toolUseResult.
+const codeModeText = (r: unknown): string => text(r) || text((r as { content?: unknown } | undefined)?.content) || (r ? JSON.stringify(r) : '')
+
 // One shell command per segment; agent-browser counts only as the command itself (env prefix or a function body allowed).
 // ponytail: read off the Bash text; a session named only in a shell variable is missed.
 const AB_CALL = /^\s*(?:\w+\s*\(\)\s*)?[{(]?\s*((?:\w+=\S*\s+)*)(?:npx\s+(?:-y\s+)?)?agent-browser((?:\s+\S+)*)/
@@ -52,7 +55,7 @@ export function openBrowsers(tail: string) {
   const pending = new Map<string, { kind: string; id?: unknown; close?: boolean }>()
   const cli = new Set<string>()
   for (const l of tail.split('\n')) {
-    let row: { message?: { content?: unknown } }
+    let row: { message?: { content?: unknown }; toolUseResult?: unknown }
     try { row = JSON.parse(l) } catch { continue }
     const c = row.message?.content
     if (!Array.isArray(c)) continue
@@ -70,7 +73,7 @@ export function openBrowsers(tail: string) {
         if ((b as { is_error?: boolean }).is_error) continue
         if (p.close) { held.delete(`${p.kind}:${p.kind === 'playwright' ? 'browser' : String(p.id ?? '')}`); continue }
         // Playwright has one browser; every other kind is keyed by the id it handed back, else by the call.
-        const id = p.kind === 'playwright' ? 'browser' : String(p.id ?? KINDS[p.kind].idOut?.exec(text(b.content))?.[1] ?? b.tool_use_id)
+        const id = p.kind === 'playwright' ? 'browser' : String(p.id ?? KINDS[p.kind].idOut?.exec(text(b.content) || codeModeText(row.toolUseResult))?.[1] ?? b.tool_use_id)
         held.set(`${p.kind}:${id}`, { kind: p.kind, id })
       }
     }

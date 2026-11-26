@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { EM, readOnly, guard, emDashes, proseLines, commitOf, tells, draftPresets, repoInfo, setup, jobsOn, slug, repoDiff, editedFiles, apiKey } from './jev-project.mjs'
+import { EM, readOnly, guard, emDashes, proseLines, commitOf, tells, draftPresets, repoInfo, setup, jobsOn, slug, repoDiff, editedFiles, apiKey, appendCapped } from './jev-project.mjs'
 
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'jev-project-'))
 const band = { low: 0.2, high: 0.5 }
@@ -216,4 +216,16 @@ test('the key comes from the env, then the Keychain, then the saved file, and is
   fs.writeFileSync(path.join(keys, 'OPENROUTER_API_KEY'), 'sk-or-file\n')
   assert.equal(apiKey({ env: { PATH: '/nowhere' }, keysDir: keys }), 'sk-or-file')
   assert.equal(apiKey({ env: { PATH: '/nowhere' }, keysDir: tmp() }), '')
+})
+
+test('appendCapped rolls a full ledger over to .1 and starts fresh', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jev-cap-'))
+  const f = path.join(dir, 'gate.jsonl')
+  appendCapped(f, 'a\n', 10)
+  appendCapped(f, 'bbbbbbbbbb\n', 10)
+  assert.equal(fs.readFileSync(f, 'utf8'), 'a\nbbbbbbbbbb\n')
+  appendCapped(f, 'c\n', 10)
+  assert.equal(fs.readFileSync(f, 'utf8'), 'c\n')
+  assert.equal(fs.readFileSync(f + '.1', 'utf8'), 'a\nbbbbbbbbbb\n')
+  fs.rmSync(dir, { recursive: true, force: true })
 })

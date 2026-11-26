@@ -6,8 +6,8 @@ import { posix, win32 } from 'node:path'
 
 // Preferences only: env, permissions, hooks and API key helpers stay where they are.
 const SAFE_SETTINGS = [
-  'model', 'theme', 'tui', 'autoMode', 'agentPushNotifEnabled', 'inputNeededNotifEnabled',
-  'autoCompactWindow', 'autoCompactEnabled', 'idleCompaction', 'autoContinueAtUsageLimit', 'remoteControlAtStartup',
+  'model', 'theme', 'tui', 'agentPushNotifEnabled', 'inputNeededNotifEnabled',
+  'autoCompactWindow', 'autoCompactEnabled', 'idleCompaction', 'skillListingMaxDescChars', 'skillListingBudgetFraction', 'autoContinueAtUsageLimit', 'remoteControlAtStartup',
 ]
 // Claude Code syncs this bucket from the account by itself.
 const SKIP_SKILLS = new Set(['synced'])
@@ -16,7 +16,12 @@ export const STATUS_LINE = { type: 'command', command: 'node <KIT>/statusline.mj
 export function exportManifest({ settings, known, skills, archived, presets, agents = [], now = Date.now() }) {
   const marketplaces = {}
   // Only where each comes from: installLocation and lastUpdated are this machine's.
-  for (const [name, entry] of Object.entries(known)) marketplaces[name] = name === 'kenneth-mods' ? { source: 'kit' } : (entry.source ?? entry)
+  for (const [name, entry] of Object.entries(known)) {
+    const source = entry.source ?? entry
+    if (name === 'kenneth-mods') marketplaces[name] = { source: 'kit' }
+    else if (source.source === 'github' && typeof source.repo === 'string') marketplaces[name] = { source: 'github', repo: source.repo }
+    else if (source.source === 'git' && /^https?:\/\//i.test(source.url ?? '')) marketplaces[name] = { source: 'git', url: source.url, ...(source.sparsePaths ? { sparsePaths: source.sparsePaths } : {}) }
+  }
   const safe = {}
   for (const key of SAFE_SETTINGS) if (settings[key] !== undefined) safe[key] = settings[key]
   safe.statusLine = STATUS_LINE
@@ -28,7 +33,7 @@ export function exportManifest({ settings, known, skills, archived, presets, age
     settings: safe,
     skills: skills.filter(s => !SKIP_SKILLS.has(s)).sort(),
     skillsArchived: [...archived].sort(),
-    jevPresets: [...presets].sort(),
+    jevPresets: [],
     agents: agents.filter(n => n.endsWith('.md')).sort(),
   }
 }
@@ -47,6 +52,11 @@ export const newestVsix = names => names.filter(vsixVersion).sort((a, b) => {
   for (let i = 0; i < Math.max(x.length, y.length); i++) if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) - (y[i] ?? 0)
   return 0
 }).pop()
+
+export const releaseChecksumMatches = (bytes, text) => {
+  const expected = /^([a-f\d]{64})(?:\s|$)/i.exec(text)?.[1]?.toLowerCase()
+  return !!expected && createHash('sha256').update(bytes).digest('hex') === expected
+}
 
 /** Marketplaces, then plugins (installed, then turned off where they were off), skills, role subagents, settings, Switchboard. */
 // kit/skills is the source for what it holds; the manifest adds skills that only come from elsewhere.
@@ -101,9 +111,10 @@ The rules above name Claude Code tools. In Codex use these instead:
 
 - AskUserQuestion: \`mcp__switchboard__ask\` (\`request_user_input\` is a fallback only and takes title and options, not question), same question and options. "Approve this chat as finished?" keeps its exact wording and options "Approve" and "Send back".
 - Agent and role subagents: \`spawn_agent\` (roles live in ~/.codex/agents), then \`wait_agent\`.
+- ListAgents: run both \`claude agents --json\` in the shell (Claude chats in every project) and \`mcp__switchboard__chats_check\` (this project, Codex chats too). \`list_agents\` shows only your own subagents.
+- SendMessage: \`send_message\` or \`send_input\`, whichever is listed, to your own subagents only. No tool reaches another chat: ask the user instead through \`mcp__switchboard__ask\`, naming each busy chat, what you will change and when, and whether to go ahead.
 - Skill tool: read the SKILL.md under ~/.agents/skills/<name>/.
 - Task tools: \`update_plan\` when listed, else keep the task list in your replies. ToolSearch: not needed, tools are already loaded.
-- Phone push at the end: skip it, Switchboard sends it when the chat is done.
 - \`mcp__switchboard__*\` tools keep their names (the switchboard MCP is in ~/.codex/config.toml).
 `
 /** version: when rules.md last changed, an ISO time in UTC. */
@@ -143,8 +154,9 @@ export const RC_NAME = 'Mac'
 export const rcArgs = () => ['remote-control', '--name', RC_NAME, '--spawn', 'same-dir', '--permission-mode', 'bypassPermissions']
 /** Pids of per-repo servers from before the single one, from `pgrep -lf "remote-control --name"` output. */
 export const oldRcPids = out => out.split('\n').flatMap(l => {
-  const m = /^(\d+) \S*claude remote-control --name (\S+)/.exec(l)
-  return m && m[2] !== RC_NAME ? [Number(m[1])] : []
+  const m = /^(\d+)\s+(.*?)\s+remote-control\s+--name\s+(\S+)/i.exec(l)
+  // Windows rows can be node.exe "...claude-code\cli.js" or cmd.exe /c "claude.cmd ...": any claude before remote-control counts
+  return m && /(^|[\\/\s"])claude(?:-code)?(?:\.(?:cmd|exe)|[\\/]|\s|"|$)/i.test(m[2]) && m[3] !== RC_NAME ? [Number(m[1])] : []
 })
 /** pgrep -f pattern (extended regex) for a running server with exactly this name. */
 export const rcPattern = name => `remote-control --name ${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}( |$)`
@@ -182,15 +194,30 @@ export function withTrust(config, repos) {
   return { ...config, projects: next }
 }
 
+/** A phone session the server holds this long without a turn is ended; a message from the phone serves it again. */
+export const RC_IDLE_MS = 6 * 3_600_000
+/**
+ * Pids of the servers' phone sessions idle for RC_IDLE_MS. rows: { pid, ppid, args } of every process; sessions:
+ * the parsed ~/.claude/sessions files. One with a shell still running is kept.
+ */
+export function idleRc(servers, rows, sessions, now) {
+  return rows.filter(r => servers.includes(r.ppid) && r.args.includes(' --sdk-url ')).filter(r => {
+    // A record left by an earlier process with this pid names another session.
+    const s = sessions.find(x => x.pid === r.pid && x.bridgeSessionId && r.args.includes(`/${x.bridgeSessionId.replace('session_', 'cse_')}`))
+    return s?.status === 'idle' && now - s.statusUpdatedAt >= RC_IDLE_MS && !rows.some(c => c.ppid === r.pid && c.args.includes('shell-snapshots'))
+  }).map(r => r.pid)
+}
+
 export const RC_LABEL = 'com.kenneth.switchboard.rc'
-/** A macOS LaunchAgent that starts the Remote Control server at login. */
-export function launchAgent(node, script) {
+export const RC_IDLE_LABEL = `${RC_LABEL}-idle`
+/** A macOS LaunchAgent: the Remote Control server at login, or with every a run each that many seconds. */
+export function launchAgent(node, script, { label = RC_LABEL, args = [], every } = {}) {
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
-  <key>Label</key><string>${RC_LABEL}</string>
-  <key>ProgramArguments</key><array><string>${node}</string><string>${script}</string></array>
-  <key>RunAtLoad</key><true/>
+  <key>Label</key><string>${label}</string>
+  <key>ProgramArguments</key><array><string>${node}</string><string>${script}</string>${args.map(a => `<string>${a}</string>`).join('')}</array>
+  ${every ? `<key>StartInterval</key><integer>${every}</integer>` : '<key>RunAtLoad</key><true/>'}
   <key>AbandonProcessGroup</key><true/>
 </dict></plist>
 `

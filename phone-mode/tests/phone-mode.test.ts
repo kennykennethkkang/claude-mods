@@ -13,6 +13,10 @@ test('the denial says push first, call per question, carry on', () => {
   expect(d).toMatch(/not re-ask/i)
 })
 
+test('Windows phone calls use py -3 with a python fallback', () => {
+  expect(denial(ASK, true)).toMatch(/command -v py[\s\S]*py -3[\s\S]*else python /)
+})
+
 let now = 0
 const rig = (on: unknown, phone: unknown) => {
   const h = on as (op: string, fn: (_: unknown, e: Record<string, any>) => unknown) => void

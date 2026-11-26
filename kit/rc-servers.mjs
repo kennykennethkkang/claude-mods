@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 // Starts the machine's one Remote Control server (RC_NAME) in ~/Documents/GitHub: marks that folder
 // trusted first, stops per-repo servers, keeps one already running in bypass mode, restarts an older one.
-// The kit's LaunchAgent runs this at login; running it by hand is safe.
+// The kit's LaunchAgent runs this at login; running it by hand is safe. --idle (hourly, macOS) only ends phone
+// sessions idle for RC_IDLE_MS and starts nothing.
 import { spawn, spawnSync } from 'node:child_process'
 import * as fs from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { oldRcPids, RC_NAME, rcArgs, rcExitNote, rcPath, procs, rcPattern, rcSpawn, staleRc, withTrust } from './kit.mjs'
+import { idleRc, oldRcPids, RC_IDLE_MS, RC_NAME, rcArgs, rcExitNote, rcPath, procs, rcPattern, rcSpawn, staleRc, withTrust } from './kit.mjs'
 
 const home = homedir()
 const root = join(home, 'Documents', 'GitHub')
@@ -33,6 +34,29 @@ function start() {
   })
 }
 
+/** Servers with RC_NAME running now. */
+function running() {
+  const out = procs(rcPattern(RC_NAME), process.platform, spawnSync).trim()
+  return out ? out.split('\n').map(l => ({ pid: Number(l.split(' ')[0]), args: l })) : []
+}
+
+function endIdle() {
+  const rows = (spawnSync('ps', ['-Awwo', 'pid=,ppid=,command='], { encoding: 'utf8', maxBuffer: 16 << 20 }).stdout ?? '').split('\n')
+    .flatMap(l => { const m = /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(l); return m ? [{ pid: Number(m[1]), ppid: Number(m[2]), args: m[3] }] : [] })
+  const dir = join(home, '.claude', 'sessions')
+  const sessions = (fs.existsSync(dir) ? fs.readdirSync(dir) : []).flatMap(f => { try { return [JSON.parse(fs.readFileSync(join(dir, f), 'utf8'))] } catch { return [] } })
+  const idle = idleRc(running().map(s => s.pid), rows, sessions, Date.now())
+  // SIGKILL: the server takes it as a crash and serves the session again on the next message. SIGTERM reads as
+  // an interrupt and its work stays held. The helpers are ended by hand, since nothing cleans up after SIGKILL.
+  for (const pid of idle) {
+    try { process.kill(pid, 'SIGKILL') } catch { continue }
+    for (const c of rows.filter(r => r.ppid === pid)) { try { process.kill(c.pid) } catch {} }
+  }
+  console.log(`ended ${idle.length} phone session(s) idle over ${RC_IDLE_MS / 3_600_000} h`)
+}
+
+if (process.argv.includes('--idle')) { if (process.platform !== 'win32') endIdle(); process.exit(0) }
+
 // Trust, written atomically and re-read just before, since running chats also write this file.
 const configPath = join(home, '.claude.json')
 try {
@@ -54,8 +78,7 @@ for (const pid of old) { try { process.kill(pid) } catch {} }
 if (old.length) console.log(`stopped ${old.length} per-repo server(s)`)
 
 // On Windows both cmd.exe and claude carry the command line; both are killed on a restart.
-const out = procs(rcPattern(RC_NAME), process.platform, spawnSync).trim()
-const now = out ? out.split('\n').map(l => ({ pid: Number(l.split(' ')[0]), args: l })) : []
+const now = running()
 if (now.length && !now.some(s => staleRc(s.args))) console.log(`running ${RC_NAME}`)
 else {
   // Started before bypass mode: phone chats would still ask for permission.

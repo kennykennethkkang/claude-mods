@@ -2,6 +2,7 @@
 name: ops
 description: Light operational writing: notes, checklists, release text, config descriptions.
 model: haiku
+color: yellow
 disallowedTools: Agent
 maxTurns: 8
 ---

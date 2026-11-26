@@ -1,13 +1,13 @@
 // Codex hook script: the guards on PreToolUse and the done-check hold on Stop.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { stripTypeScriptTypes } from 'node:module'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { GUARD_MODS, fallbackDeny, refreshCopy, preToolUse, paidGuard, tabsHold, post, stop, rolloutRows } from './codex-hooks.mjs'
+import { GUARD_MODS, claimGuard, fallbackDeny, refreshCopy, preToolUse, paidGuard, tabsHold, post, stop, rolloutRows } from './codex-hooks.mjs'
 import { codexGuardFiles, codexRoleNames, mergeCodexHooks } from './kit.mjs'
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), '..')
@@ -458,4 +458,71 @@ test('apply_patch Move to records the destination too', () => {
   const rows = rolloutRows([row('session_meta', { cwd: '/x' }), user('go'), row('response_item', { type: 'custom_tool_call', name: 'apply_patch', input: body, call_id: 'p' })].join('\n'))
   const paths = rows.flatMap(r => r.message.content).filter(b => b.type === 'tool_use').map(b => b.input.file_path)
   assert.deepEqual(paths, ['old.ts', '/h/.cache/new.ts'])
+})
+
+test('claims: Codex stamps a free file, is refused on a Claude-held one, and PostToolUse stamps too', () => withDir(home => {
+  const repo = join(home, 'Documents/GitHub/app')
+  mkdirSync(join(repo, '.git'), { recursive: true })
+  const cf = join(home, '.claude/switchboard/claims/', `${repo.replace(/[^A-Za-z0-9]+/g, '-')}.json`)
+  const pre = (file, session) => preToolUse({ ...patch(file, 'x'), cwd: repo, session_id: session }, home)
+  assert.equal(pre(`${repo}/a.ts`, 'cx1'), undefined)
+  assert.equal(JSON.parse(readFileSync(cf, 'utf8'))[`${repo}/a.ts`].session, 'cx1')
+  writeFileSync(cf, JSON.stringify({ [`${repo}/b.ts`]: { session: 'claude1', at: Date.now() - 60_000 } }))
+  assert.match(pre(`${repo}/b.ts`, 'cx1'), /held by chat claude1\. The hold lapses in \d+ min/)
+  assert.equal(pre(`${repo}/b.ts`, 'claude1'), undefined)
+  post({ hook_event_name: 'PostToolUse', session_id: 'cx2', turn_id: 't', cwd: repo, tool_name: 'apply_patch', tool_input: { command: '*** Begin Patch\n*** Update File: c.ts\n*** End Patch' }, tool_response: '{}' }, { dir: join(home, 'st'), home })
+  assert.equal(JSON.parse(readFileSync(cf, 'utf8'))[`${repo}/c.ts`].session, 'cx2')
+  assert.equal(claimGuard([`${repo}/b.ts`], 'cx1', home, { now: Date.now() + 21 * 60_000 }), undefined)
+}))
+
+test("claims: a role run's Stop frees its own files; an ordinary or held Stop keeps them", () => withDir(home => {
+  const dir = join(home, '.claude/switchboard/claims'), cf = join(dir, 'app.json'), other = join(dir, 'other.json')
+  // a.json cannot be read as a file; the ones after it are still freed
+  mkdirSync(join(dir, 'a.json'), { recursive: true })
+  const at = Date.now()
+  const all = { '/r/a.ts': { session: 'cx1', at }, '/r/b.ts': { session: 'lead', at } }
+  const st = join(home, '.claude/switchboard/codex-hooks')
+  const end = role => {
+    writeFileSync(cf, JSON.stringify(all))
+    writeFileSync(other, 'not json')
+    const env = { ...process.env, HOME: home, USERPROFILE: home, SWITCHBOARD_ROLE_RUN: role }
+    const r = spawnSync(process.execPath, ['--no-warnings', join(REPO, 'kit/codex-hooks.mjs')], { input: JSON.stringify({ hook_event_name: 'Stop', session_id: 'cx1', turn_id: 't', cwd: home, last_assistant_message: 'Status: done' }), encoding: 'utf8', env })
+    assert.equal(r.status, 0, r.stderr)
+    assert.equal(readFileSync(other, 'utf8'), 'not json')
+    return { out: r.stdout, left: Object.keys(JSON.parse(readFileSync(cf, 'utf8'))), files: readdirSync(dir).sort() }
+  }
+  assert.deepEqual(end('').left, ['/r/a.ts', '/r/b.ts'])
+  assert.deepEqual(end('engineer-codex'), { out: '', left: ['/r/b.ts'], files: ['a.json', 'app.json', 'other.json'] })
+  post({ hook_event_name: 'PostToolUse', session_id: 'cx1', turn_id: 't', cwd: home, tool_name: 'mcp__playwright__browser_navigate', tool_input: { url: 'https://x.test' }, tool_response: 'ok' }, { dir: st, home })
+  const held = end('engineer-codex')
+  assert.match(held.out, /"decision":"block"/)
+  assert.deepEqual(held.left, ['/r/a.ts', '/r/b.ts'])
+}))
+
+test('a Workbench patch outside the folder needs an open change that names every file', () => {
+  // tmp paths never need a log, so this home sits in the repo
+  const home = mkdtempSync(join(REPO, '.wb-test-'))
+  try {
+    const wb = join(home, 'Documents/Research/Workbench'), rc = join(home, '.zshrc'), gone = join(home, '.old')
+    const run = (body, cwd = wb) => preToolUse({ tool_name: 'apply_patch', cwd, session_id: 'cx', tool_input: { command: `*** Begin Patch\n${body}\n*** End Patch` } }, home)
+    const id = '20261124-190000-zsh-ab12', dir = join(home, '.claude/switchboard/adjustments', id)
+    const record = (status, files) => { mkdirSync(dir, { recursive: true }); writeFileSync(join(dir, 'record.json'), JSON.stringify({ id, status, files })) }
+    const up = `*** Update File: ${rc}\n@@\n+x`
+    assert.match(run(up), /log this change first/)
+    assert.match(run('*** Update File: ../../../.zshrc\n@@\n+x'), /log this change first/)
+    assert.match(run(`*** Update File: ${wb}/../../../.zshrc\n@@\n+x`), /log this change first/)
+    assert.match(run(`*** Delete File: ${gone}`), /log this change first/)
+    assert.match(run(`*** Update File: notes.md\n*** Move to: ${gone}\n@@\n+x`), /log this change first/)
+    assert.equal(run('*** Add File: notes.md\n+x'), undefined)
+    assert.equal(run(up, join(home, 'Documents/GitHub/app')), undefined)
+    record('open', [{ path: rc }])
+    assert.equal(run(up), undefined)
+    assert.match(run(`${up}\n*** Delete File: ${gone}`), /--file "[^"]*\.old"/)
+    record('open', [{ path: '/elsewhere', link: rc }])
+    assert.equal(run(up), undefined)
+    record('done', [{ path: rc }])
+    assert.match(run(up), /log this change first/)
+    record('open', 'broken')
+    assert.match(run(up), /log this change first/)
+  } finally { rmSync(home, { recursive: true, force: true }) }
 })

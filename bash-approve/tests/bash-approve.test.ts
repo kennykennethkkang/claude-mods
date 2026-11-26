@@ -65,6 +65,44 @@ test('each hard pattern is refused', () => {
   for (const [c, why] of cases) expect(hardDeny(c) ?? `allowed: ${c}`).toMatch(why)
 })
 
+test('Windows destructive commands are refused', () => {
+  for (const c of [
+    'Remove-Item -Recurse C:\\', 'Remove-Item -Recurse C:\\Users\\me',
+    'rm -r $env:USERPROFILE', 'rmdir /s /q %USERPROFILE%', 'del /s /q C:\\Users\\me\\Documents\\GitHub',
+    'Format-Volume -DriveLetter C', 'format c:', 'C:\\Program Files\\Git\\bin\\git.exe push --force origin main',
+  ]) expect(hardDeny(c, { home: 'C:\\Users\\me' }) ?? `allowed: ${c}`).toMatch(/refused|rm -r|disk|force push/i)
+  expect(hardDeny('rm -r .', { home: 'C:\\Users\\me', cwd: 'C:\\Users\\me' }) ?? 'allowed').toMatch(/rm -r/)
+})
+
+test('Windows delete aliases, grouped flags, and protected parents are refused', () => {
+  for (const c of [
+    'rd /s/q C:\\', 'rd /q/s C:\\', 'Remove-Item -Rec -Force C:\\', 'ri -r -fo C:\\',
+    'del /f /s /q C:\\*.*', 'erase /s/q C:\\Users\\me\\Documents\\GitHub',
+    'Remove-Item -Recurse -Force C:\\Users',
+  ]) expect(hardDeny(c, { home: 'C:\\Users\\me' }) ?? `allowed: ${c}`).toMatch(/rm -r|refused/i)
+})
+
+test('USERPROFILE supplies the home path when HOME is absent', async ($, on) => {
+  on('tool.call', () => ({ result: {} }))
+  on('session.cwd', () => ({ value: 'C:\\Users\\me\\Documents\\GitHub\\app' }))
+  on('env.get', (_, e) => ({ value: e.name === 'USERPROFILE' ? 'C:\\Users\\me' : undefined }))
+  expect(JSON.stringify(await $.tool.call({ tool: 'Bash', command: 'Remove-Item -Recurse C:\\Users\\me' } as any))).toMatch(/always refused/)
+})
+
+test('drive variables, colon flags, format switches, Clear-Disk and Git Bash roots are refused', () => {
+  for (const c of [
+    'rd /s /q %SystemDrive%\\', 'Remove-Item -Recurse -Force $env:HOMEDRIVE\\', 'rd /s /q %HOMEDRIVE%\\',
+    'Remove-Item -Recurse:$true -Force C:\\', 'format /fs:ntfs D:', 'cmd /c format /q e:', 'powershell -c "format C:"', "pwsh -Command 'format d: /q'",
+    'Clear-Disk -Number 1 -RemoveData -Confirm:$false', 'rm -rf /c/', 'rm -rf /c', 'rm -rf /c/Users/me',
+  ]) expect(hardDeny(c, { home: 'C:\\Users\\me' }) ?? `allowed: ${c}`).toMatch(/rm -r|refused|disk/i)
+  for (const c of ["git log --format='%h %s' -- C:/x", 'date +%Y format a: b', 'npx prettier --check src/format.ts'])
+    expect(hardDeny(c, { home: 'C:\\Users\\me' }) ?? 'ok').toBe('ok')
+})
+
+test('diskpart is refused', () => {
+  expect(hardDeny('diskpart') ?? 'allowed').toMatch(/disk/)
+})
+
 test('a loopback download may pipe into a script, a remote one may not', () => {
   for (const c of [
     "curl -s http://127.0.0.1:8080/v1/projects/demo/databases/(default)/documents/users | node -e 'console.log(1)'",
@@ -156,4 +194,12 @@ test('a mode seen for another session does not leak', async ($, on) => {
   on('tool.check', () => ({ decision: 'ask' as const }))
   await $.classic.UserPromptSubmit({ session_id: 'other', prompt: 'x', permission_mode: 'auto' })
   expect((await $.tool.check({ tool: 'Bash', input: { command: 'npm run build' } })).decision).toBe('ask')
+})
+
+test('a failing cwd or home lookup never holds a clean call', async ($, on) => {
+  on('tool.call', () => ({ result: {} }))
+  on('env.get', () => ({ deny: 'env read failed' }))
+  on('session.cwd', () => ({ deny: 'cwd read failed' }))
+  expect(JSON.stringify(await $.tool.call({ tool: 'Bash', command: 'git status --short | wc -l' } as any))).not.toMatch(/bash-approve/)
+  expect(JSON.stringify(await $.tool.call({ tool: 'Bash', command: 'sudo ls' } as any))).toMatch(/always refused \(sudo/)
 })

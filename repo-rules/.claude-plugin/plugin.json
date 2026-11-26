@@ -1,7 +1,7 @@
 {
   "name": "repo-rules",
-  "version": "0.2.2",
-  "description": "Kenneth's standing rules as guards: no commit or push, no git rm --cached, no prettier --write, no new em dashes",
+  "version": "0.2.12",
+  "description": "Kenneth's standing rules as guards: no commit or push, no git rm --cached, no prettier --write, no new em dashes, no writing a file another live chat holds",
   "author": {
     "name": "Kenneth Kang"
   },

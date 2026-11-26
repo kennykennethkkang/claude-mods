@@ -20,6 +20,7 @@ A panel of synthetic users votes between 2 to 4 options. Default 1000 personas t
   - copy or skill output: pass the text, or `@file.txt`
   - HTML: `@page.html` (tags stripped to visible text)
   - screenshot: Jev reads text only. Read each image yourself and write one neutral, factual description per option with the same fields in the same order (layout, main text, buttons, colors, contrast, size of tap targets). Never say which you prefer in it. Pass those as the options. With `--panel`, the haiku panel gets the same descriptions.
+    Every option's screenshot shows the same picked item, tab and data; if they differ, recapture before writing descriptions.
 - Who writes the options: an agent that built neither option (usually qa). The builder of a variant never writes its description or runs crowd-ab on its own work.
 - Labels: `--label` per option, same order, for the report.
 
@@ -39,6 +40,17 @@ What it does, so you do not redo it by hand:
 - Haiku panel: shows all options in a shuffled order per persona so position bias cancels, and reports how often the option shown first won (near 50% for two options means no bias; far off means the panel is reading position, not content).
 - Prints a cost estimate, runs a 10 persona pilot, extrapolates the real cost and stops if it is over `--cap` (default $1).
 - Fallback when Jev is missing or `jev.py status` fails (or `--panel`): 30 personas via `claude -p --model haiku`, 4 at a time, with a one-line free text reason each. Stops on "hit your" usage limits.
+- Live in Switchboard: every rating (Jev) or pick (haiku panel) lands in `~/.claude/switchboard/jev/<run>.jsonl`, and the Plan tab's Crowd A/B card shows the running vote share and the newest ratings as they come in.
+
+## Deciding a winner
+
+One Jev run is not enough to pick a design. In a 2026-11-19 bench with planted defects, Jev alone crowned the cluttered side and the ambiguous empty state with high confidence, and was blind to misleading copy. The panel alone crowned cosmetic near-ties. Together they gave 7 of 8 right, 0 wrong and 0 false winners on 4 controls, out of sample.
+
+1. Run Jev twice with the same `--seed`: options in order, then reversed. With 3 or 4 options, rotate so each option is shown first once.
+2. Run `--panel` once with the same options and device mix (30 haiku personas, no dollar cost).
+3. A winner only when every Jev order and the panel name the same option. Otherwise report "no winner" and read the panel's why lines for what to fix. When Jev and the panel disagree, trust neither.
+4. Treat a Jev win for the busier option as a warning: Jev prefers more controls.
+5. MiroFish is for free-text doubts only, never the verdict: its feeds copy the first post, and it crowned opposite winners on two identical screens.
 
 ## Reading the result
 

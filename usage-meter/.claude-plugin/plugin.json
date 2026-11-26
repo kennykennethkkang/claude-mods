@@ -1,6 +1,6 @@
 {
   "name": "usage-meter",
-  "version": "0.5.7",
+  "version": "0.6.14",
   "description": "Feeds Switchboard: this chat's context, limits, token diet and Jev runs, and carries back messages and Remote Control requests typed there",
   "author": {
     "name": "Kenneth Kang"

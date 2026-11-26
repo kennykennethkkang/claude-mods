@@ -1,8 +1,15 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { wilson, aggregate, decode, personas, report, votesFromRatings, parseDevice } from './crowd-ab.mjs'
+import { wilson, aggregate, decode, personas, report, votesFromRatings, parseDevice, pythonRun } from './crowd-ab.mjs'
 
 const v = (pick, n, seg = { age: '25-34', device: 'phone' }, reason = 'clearer') => Array.from({ length: n }, () => ({ pick, reason, seg }))
+
+test('Windows Jev uses py -3 and falls back to python', () => {
+  const calls = []
+  const run = (bin, args) => { calls.push([bin, args]); return bin === 'py' ? { error: { code: 'ENOENT' } } : { status: 0 } }
+  assert.equal(pythonRun(['jev.py'], {}, run, 'win32').status, 0)
+  assert.deepEqual(calls, [['py', ['-3', 'jev.py']], ['python', ['jev.py']]])
+})
 
 test('wilson matches known 95% interval', () => {
   const [lo, hi] = wilson(60, 100)

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // self-improve: propose a capped edit to one kit file, A/B it headless on held-out evals, judge blind, verdict.
-// node self-improve.mjs --target <kit file> --lessons <file> [--candidate <file>] [--budget 3] [--margin 0.1] [--dry-run]
+// node self-improve.mjs --target <kit file> --lessons <file> [--candidate <file>] [--budget 10] [--margin 0.1] [--dry-run]
 // Never writes the target. Output goes to ~/.claude/self-improve/runs/<stamp>/.
 import fs from 'node:fs'
 import os from 'node:os'
@@ -43,15 +43,35 @@ export function diffLines(a, b) {
   return x.length + y.length - 2 * dp[0][0]
 }
 
-// side: { [taskId]: { pass: [bool], turns, cost } }
-export function decide(base, cand, margin = 0.1) {
+// A new version counts only after this many judged checklist items passed on it (ChiefGyk3D's persona rule).
+export const MIN_APPROVED = 30
+// held-out runs so a candidate passing 80% still reaches MIN_APPROVED; exactly 30 judged would demand a perfect run
+export const runsFor = items => Math.max(1, Math.ceil(MIN_APPROVED / (0.8 * items)))
+// passes per checklist item, summed over repeated runs
+const perItem = t => { const n = t.items || t.pass.length, c = new Array(n).fill(0); t.pass.forEach((p, i) => { if (p) c[i % n]++ }); return c }
+
+// judged runs -> one row per task and side, pass arrays joined in run order
+export function merge(judged) {
+  const rows = new Map()
+  for (const o of [...judged].sort((a, b) => a.run - b.run)) {
+    const k = `${o.id}\n${o.side}`, r = rows.get(k) ?? { id: o.id, side: o.side, items: o.pass.length, pass: [], turns: 0, cost: 0, results: [] }
+    r.pass.push(...o.pass); r.turns += o.turns || 0; r.cost += o.cost || 0; r.results.push(o.result)
+    rows.set(k, r)
+  }
+  return [...rows.values()]
+}
+
+// side: { [taskId]: { pass: [bool], items, turns, cost } }; pass holds every run back to back, items long each
+export function decide(base, cand, margin = 0.1, minApproved = MIN_APPROVED) {
   const rate = s => { const all = Object.values(s).flatMap(t => t.pass); return all.length ? all.filter(Boolean).length / all.length : 0 }
   const sum = (s, k) => Object.values(s).reduce((a, t) => a + (t[k] || 0), 0)
   const rb = rate(base), rc = rate(cand)
-  const regressed = Object.keys(base).filter(id => cand[id] && base[id].pass.some((p, i) => p && !cand[id].pass[i]))
-  const out = { baseline: rb, candidate: rc, regressed, baseCost: sum(base, 'cost'), candCost: sum(cand, 'cost'), baseTurns: sum(base, 'turns'), candTurns: sum(cand, 'turns') }
+  const regressed = Object.keys(base).filter(id => cand[id] && perItem(base[id]).some((n, k) => n > (perItem(cand[id])[k] || 0)))
+  const approved = Object.values(cand).flatMap(t => t.pass).filter(Boolean).length
+  const out = { baseline: rb, candidate: rc, regressed, approved, baseCost: sum(base, 'cost'), candCost: sum(cand, 'cost'), baseTurns: sum(base, 'turns'), candTurns: sum(cand, 'turns') }
   if (Object.keys(cand).length < Object.keys(base).length) return { ...out, accept: false, why: 'candidate runs incomplete' }
   if (regressed.length) return { ...out, accept: false, why: `regressed on ${regressed.join(', ')}` }
+  if (approved < minApproved) return { ...out, accept: false, why: `${approved} approved results, need ${minApproved}` }
   if (rc >= rb + margin) return { ...out, accept: true, why: `pass rate ${pc(rb)} -> ${pc(rc)}` }
   if (rc === rb && out.candCost <= 0.85 * out.baseCost && out.candTurns <= out.baseTurns)
     return { ...out, accept: true, why: `same pass rate, cost ${out.baseCost.toFixed(3)} -> ${out.candCost.toFixed(3)}` }
@@ -109,7 +129,7 @@ function workspace(dir, target, text) {
 const pairs = async (jobs, f) => { const out = []; for (let i = 0; i < jobs.length; i += 2) out.push(...await Promise.all(jobs.slice(i, i + 2).map(f))); return out }
 
 async function main() {
-  const a = { budget: 3, margin: 0.1 }
+  const a = { budget: 10, margin: 0.1 }
   const argv = process.argv.slice(2)
   for (let i = 0; i < argv.length; i++) a[argv[i].replace(/^--/, '').replace(/-(\w)/g, (_, c) => c.toUpperCase())] = argv[i + 1]?.startsWith('--') || i + 1 >= argv.length ? true : argv[++i]
   a.budget = +a.budget; a.margin = +a.margin
@@ -142,28 +162,35 @@ async function main() {
   const reject = guardCandidate(base, cand)
   if (reject) { console.log('REJECT before bench: ' + reject); return }
 
-  const jobs = held.flatMap(t => [['baseline', base], ['candidate', cand]].map(([side, text]) => ({ t, side, text })))
-  const outs = await pairs(jobs, async ({ t, side, text }) => {
-    const ws = path.join(run, 'ws', `${t.id}-${side}`)
+  const runs = runsFor(held.reduce((n, t) => n + t.checklist.length, 0))
+  console.log(`${runs} run(s) per held-out task for ${MIN_APPROVED} judged results`)
+  const jobs = Array.from({ length: runs }, (_, r) => held.flatMap(t => [['baseline', base], ['candidate', cand]].map(([side, text]) => ({ t, side, text, r })))).flat()
+  const outs = await pairs(jobs, async ({ t, side, text, r }) => {
+    const ws = path.join(run, 'ws', `${t.id}-${side}-${r}`)
     const extra = workspace(ws, a.target, text)
     const model = extra.includes('--agent') ? [] : ['--model', 'sonnet']
     const j = await claude([...model, '--max-turns', '20', '--disallowedTools', 'Bash,Write,Edit,WebFetch,WebSearch', ...extra], ws, a.budget, t.prompt)
-    return { t, side, result: j.result || '', turns: j.num_turns, cost: j.total_cost_usd }
+    // kept so a later judge failure still leaves the outputs to inspect
+    fs.writeFileSync(path.join(ws, 'out.md'), j.result || '')
+    return { t, side, run: r, result: j.result || '', turns: j.num_turns, cost: j.total_cost_usd }
   })
   const judgeTpl = fs.readFileSync(path.join(EVALS, 'judge.md'), 'utf8')
   const judged = await pairs(outs, async o => {
     const prompt = judgeTpl.replace('{{task}}', o.t.prompt).replace('{{output}}', o.result).replace('{{checklist}}', o.t.checklist.map((c, i) => `${i + 1}. ${c}`).join('\n'))
     // a short pass array once read a missing slot as a regression; retry, then fail the run
+    let j
     for (let k = 0; k < 3; k++) {
-      const j = await claude(['--model', 'sonnet', '--max-turns', '1'], fs.mkdtempSync(path.join(os.tmpdir(), 'si-judge-')), a.budget, prompt)
+      j = await claude(['--model', 'sonnet', '--max-turns', '1'], fs.mkdtempSync(path.join(os.tmpdir(), 'si-judge-')), a.budget, prompt)
       const pass = parsePass(j.result, o.t.checklist.length)
       if (pass) return { ...o, pass }
     }
+    fs.writeFileSync(path.join(run, `judge-fail-${o.t.id}-${o.side}-${o.run}.txt`), j.result || '')
     throw new Error(`judge gave no ${o.t.checklist.length}-item verdict for ${o.t.id} ${o.side}`)
   })
-  const side = s => Object.fromEntries(judged.filter(o => o.side === s).map(o => [o.t.id, { pass: o.pass, turns: o.turns, cost: o.cost }]))
-  const verdict = { ...decide(side('baseline'), side('candidate'), a.margin), spent }
-  fs.writeFileSync(path.join(run, 'results.json'), JSON.stringify({ target: path.resolve(a.target), judged: judged.map(({ t, text, ...o }) => ({ id: t.id, ...o })), verdict }, null, 1))
+  const rows = merge(judged.map(({ t, text, ...o }) => ({ id: t.id, ...o })))
+  const side = s => Object.fromEntries(rows.filter(o => o.side === s).map(o => [o.id, o]))
+  const verdict = { ...decide(side('baseline'), side('candidate'), a.margin), runs, spent }
+  fs.writeFileSync(path.join(run, 'results.json'), JSON.stringify({ target: path.resolve(a.target), judged: rows, verdict }, null, 1))
   console.log(JSON.stringify(verdict, null, 1))
   console.log(verdict.accept ? `ACCEPT: file ${path.join(run, 'candidate.diff')} with todo_add for Kenneth to merge` : 'REJECT: ' + verdict.why)
 }

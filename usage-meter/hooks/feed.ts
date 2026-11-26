@@ -1,7 +1,7 @@
 import type { EngineInterface, SessionContextBreakdown, SessionUsage } from 'claude-code'
 import { OWN, handedOff, handoff, hardFull, keepGoing, liveAgents, maybeHandoff, nearFull, pausePrompt, restoreFeed, saveFeed, whatIsLive } from './handoff'
 import { ensureOpenTasks, handoffNote, openTasks, summaryOf } from './handoff-note'
-import { POST_EVERY_MS, discover, fetchSoon, homeDir, homeOf, norm, post, rootOf, withToken } from './hub'
+import { POST_EVERY_MS, discover, fetchSoon, fetchWithin, homeDir, homeOf, norm, post, rootOf, withToken } from './hub'
 import { HUB_RESUME, RESUME_DEDUP_MS, holding, liftHold, loadHold } from './limits'
 import { projectDir } from './model'
 import { liveShells, syncShells } from './shells'
@@ -96,25 +96,42 @@ export async function count($: EngineInterface, owner: string) {
   await $.store.set('uses', { ...uses, [owner]: (uses[owner] ?? 0) + 1 })
 }
 export async function poll($: EngineInterface) {
-  if (st.polling) return
+  if (st.polling) return false
   st.polling = true
+  let delivered = false
   try {
     const id = await $.session.id()
     const got = await Promise.all((await discover($)).map(t => fetchSoon($, `http://127.0.0.1:${t.port}/hub/inbox?session=${encodeURIComponent(id)}`, withToken(t))))
     for (const g of got) {
       if (!g?.ok) continue
-      try { await deliver($, JSON.parse(g.text) as InboxItem[]) } catch { /* not a list */ }
+      try {
+        const items = JSON.parse(g.text) as InboxItem[]
+        if (items.length) { await deliver($, items); delivered = true }
+      } catch { /* not a list */ }
     }
   } finally { st.polling = false }
+  return delivered
 }
-/** The window holding this chat's folder, asked for its brief or an answer; this project only. */
-export async function askHome($: EngineInterface, route: 'brief' | 'ask' | 'recall', q?: string) {
+// Recall reads every note when its graph is cold; the brain's Haiku call has a minute (ASK_TIMEOUT_MS in Switchboard's brain.ts).
+const WAIT_S: Record<string, number> = { recall: 10, ask: 65 }
+/** The window holding this chat's folder, asked for its brief or an answer; this project only. Memory is the whole Mac's, so recall
+ * asks the window that started last, then older ones: a window that has not reloaded still runs its old build. undefined: no window; null: none answered in time. */
+export async function askHome($: EngineInterface, route: 'brief' | 'ask' | 'recall' | 'research-offer', q?: string, scope?: string) {
   const cwd = norm(await $.session.cwd())
-  const home = homeOf(await discover($), cwd)
-  if (!home) return undefined
-  const query = `cwd=${encodeURIComponent(cwd)}&session=${encodeURIComponent(await $.session.id())}${q ? `&q=${encodeURIComponent(q)}` : ''}`
-  const got = await fetchSoon($, `http://127.0.0.1:${home.port}/hub/${route}?${query}`, withToken(home))
-  return got?.ok ? got.text : undefined
+  const targets = await discover($)
+  const home = homeOf(targets, cwd)
+  // Three at most: a crashed window's file fails at once, a hung one costs WAIT_S.
+  const order = route === 'recall' ? targets.slice(0, 3) : home ? [home] : []
+  if (!order.length) return undefined
+  const query = `cwd=${encodeURIComponent(cwd)}&session=${encodeURIComponent(await $.session.id())}${q ? `&q=${encodeURIComponent(q)}` : ''}${scope ? `&scope=${scope}` : ''}`
+  for (const t of order) {
+    const url = `http://127.0.0.1:${t.port}/hub/${route}?${query}`
+    const got = await (WAIT_S[route] ? fetchWithin($, WAIT_S[route], url, withToken(t)) : fetchSoon($, url, withToken(t)))
+    if (got?.ok) return got.text
+    // A closed window or a new token: look again next time.
+    if (!got || got.status === 403) feed.foundAt = -Infinity
+  }
+  return null
 }
 export async function start($: EngineInterface) {
   if ((await $.store.get('since')) === undefined) await $.store.set('since', new Date(await $.clock.now()).toISOString().slice(0, 10))

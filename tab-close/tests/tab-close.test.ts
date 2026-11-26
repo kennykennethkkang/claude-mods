@@ -35,6 +35,13 @@ test('Scrapling and Firecrawl sessions close by their id; a failed open holds no
   expect(openBrowsers([tail, use('f', 'mcp__firecrawl__firecrawl_browser_delete', { sessionId: 'fc-9' }), result('f', 'ok')].join('\n')).held).toEqual([{ kind: 'scrapling', id: 'abc123def456' }])
 })
 
+test('a Code Mode open reads its id from toolUseResult', () => {
+  const inner = (r: unknown) => line({ type: 'user', isVirtual: true, toolUseResult: r, message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'repl_1', content: '', is_error: false }] } })
+  for (const r of ['{"session_id": "abc123"}', [{ type: 'text', text: '{"session_id": "abc123"}' }], { session_id: 'abc123' }]) {
+    expect(openBrowsers([use('repl_1', 'mcp__scrapling__open_request_session'), inner(r)].join('\n')).held).toEqual([{ kind: 'scrapling', id: 'abc123' }])
+  }
+})
+
 test('agent-browser sessions open on use and drop on close', () => {
   const tail = [
     use('a', 'Bash', { command: 'agent-browser --session qa open http://localhost:3132' }),

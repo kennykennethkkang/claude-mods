@@ -1,6 +1,6 @@
 ---
 name: comment-analyzer
-description: Analyze code comments for accuracy, completeness, maintainability, and comment rot risk.
+description: Comment accuracy and rot
 model: haiku
 tools: Read, Grep, Glob
 ---

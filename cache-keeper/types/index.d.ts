@@ -5,6 +5,8 @@ export type Keep = {
   pings: number
   /** When the lead's last turn ended. */
   idleSince: number
+  /** When the next keep-alive ping is due. */
+  pingAt?: number
   /** The lead's turn is running. */
   busy?: boolean
   /** Last minute tick, so the band's countdown redraws. */

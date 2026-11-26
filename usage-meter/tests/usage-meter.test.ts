@@ -6,12 +6,29 @@ import { creditsIn, deliver, dietOf, jevRun, ownerOf, poll } from '../hooks/feed
 import { branchFor } from '../hooks/branch-name.ts'
 import { endsAsking, handoffDenial, maybeHandoff, nearFull, notePlan, noteTasks, restoreFeed } from '../hooks/handoff.ts'
 import { ensureOpenTasks, handoffNote, summaryOf } from '../hooks/handoff-note.ts'
-import { homeOf, norm, targetsOf } from '../hooks/hub.ts'
-import { carryGoal, indefiniteAsk, indefiniteDenial, indefiniteOn, indefiniteStop } from '../hooks/indefinite.ts'
+import { discover, homeOf, norm, targetsOf } from '../hooks/hub.ts'
+import { carryGoal, gateShell, indefiniteAsk, indefiniteDenial, indefiniteOn, indefiniteStop } from '../hooks/indefinite.ts'
 import { heldNow, holdDenial, holdLine, holdTick, hubHold, noteActive, overLimit, untilText } from '../hooks/limits.ts'
-import { agentFileModel, cleanReport, debugBrief, escalationNote, learnRun, memoryDir, pickModel, type Learned, type Run } from '../hooks/model.ts'
+import { agentFileModel, cleanReport, debugBrief, escalationNote, learnRun, memoryDir, pickModel, spawnModel, type Learned, type Run } from '../hooks/model.ts'
 import { redact } from '../hooks/redact.ts'
 import { liveShells, noteShell, shellsDone } from '../hooks/shells.ts'
+import { codexDenial } from '../hooks/codex-first.ts'
+import { register, timerWork } from '../hooks/register.ts'
+import { st } from '../hooks/state.ts'
+
+test('routes eligible engineer and qa starts to Codex once per brief', () => {
+  const seen = new Set<string>(), windows = [
+    { kind: 'codex_seven_day', percentUsed: 10, resetsAt: '2030-01-08T00:00:00.000Z' },
+    { kind: 'codex_five_hour', percentUsed: 20, resetsAt: '2030-01-01T05:00:00.000Z' },
+  ], claude = [{ kind: 'seven_day', percentUsed: 90 }]
+  const input = { role: 'engineer', prompt: 'fix bug', session: 's1', enabled: true, roleFile: true, codex: windows, claude, now: 1_800_000_000_000, seen }
+  expect(codexDenial(input)).toContain('Codex has 90% of its week left, Claude has 10% left')
+  expect(codexDenial(input)).toBeUndefined()
+  expect(codexDenial({ ...input, prompt: 'Claude only: browser needed' })).toBeUndefined()
+  expect(codexDenial({ ...input, prompt: 'new brief', seen: new Set(), codex: windows.map(w => ({ ...w, percentUsed: 86 })) })).toBeUndefined()
+  expect(codexDenial({ ...input, prompt: 'new brief', seen: new Set(), codex: windows.map(w => ({ ...w, resetsAt: '2000-01-01T00:00:00.000Z' })) })).toContain('Codex has 100% of its week left')
+  expect(codexDenial({ ...input, prompt: 'new brief', seen: new Set(), codex: [] })).toBeUndefined()
+})
 
 test('reports to every Switchboard window, whatever folder it has open', () => {
   const files = [
@@ -23,6 +40,36 @@ test('reports to every Switchboard window, whatever folder it has open', () => {
   ]
   expect(targetsOf(files).map(t => t.port)).toEqual([1, 2])
   expect(norm('C:\\Users\\k\\proj\\')).toBe('C:/Users/k/proj')
+})
+
+test('discovery reads only workspace-hash and pid window files', async () => {
+  const read: string[] = []
+  const $ = {
+    clock: { now: async () => 100_000 }, env: { get: async () => '/u' },
+    fs: {
+      list: async () => ['abc-123.json', 'workspaces.json', 'limits.json', 'bad-2x.json'].map(name => ({ name, kind: 'file', mtimeMs: 0 })),
+      read: async (path: string) => { read.push(path); return JSON.stringify({ port: 1, workspace: '/u', hubToken: 't' }) },
+    },
+  } as unknown as EngineInterface
+  const targets = await discover($)
+  expect(targets.map(t => t.port)).toEqual([1])
+  expect(read).toEqual(['/u/.claude/switchboard/abc-123.json'])
+})
+
+test('idle timer backs off, activity wakes it, and held ticks keep checking', async () => {
+  expect(timerWork(29, false)).toEqual({ poll: true, hold: true })
+  expect(timerWork(30, false)).toEqual({ poll: true, hold: true })
+  expect(timerWork(31, false)).toEqual({ poll: false, hold: false })
+  expect(timerWork(33, false)).toEqual({ poll: true, hold: false })
+  expect(timerWork(31, true).hold).toBe(true)
+  st.quietTicks = 40
+  await noteActive({ clock: { now: async () => 123 } } as unknown as EngineInterface)
+  expect(st.quietTicks).toBe(0)
+  const handlers = new Map<string, (...a: unknown[]) => unknown>()
+  register(((name: string, a: unknown, b: unknown) => { handlers.set(name, (b ?? a) as never); return { catch: () => undefined } }) as never)
+  st.quietTicks = 40
+  await handlers.get('agent.spawn')!({}, { resume: 'a1' }, async () => ({}))
+  expect(st.quietTicks).toBe(0)
 })
 
 test('reads a Jev run from its summary line', () => {
@@ -308,17 +355,59 @@ test('a spawn runs on its agent file model, raised by what this project learned,
   expect((await spawn('ops', 'notes')).model).toBe('inherited')
   expect((await spawn('bland:norm', 'x')).model).toBe('inherited')
   expect((await round('Status: done with concerns')).model).toBe('sonnet')
-  await round('Status: blocked')
+  // a sent-back round reruns a step up, so the third failed round is on opus
+  expect((await round('Status: blocked')).model).toBe('opus')
   await round('Status: done with concerns')
   const learned = JSON.parse(files.get('/u/.claude/switchboard/model-learn.json') ?? '[]')
-  expect(learned[0]).toMatchObject({ project: '/u/App', role: 'designer', files: ['web/board.tsx'], from: 'sonnet', to: 'opus' })
-  expect(files.get('/u/.claude/projects/-u-App/memory/model-escalations.md')).toContain('web/board.tsx: designer, sonnet failed 3 redesign rounds')
+  expect(learned[0]).toMatchObject({ project: '/u/App', role: 'designer', files: ['web/board.tsx'], from: 'opus', to: 'fable' })
+  expect(files.get('/u/.claude/projects/-u-App/memory/model-escalations.md')).toContain('web/board.tsx: designer, opus failed 3 redesign rounds')
   expect(files.get('/u/.claude/projects/-u-App/memory/MEMORY.md')).toContain('(model-escalations.md)')
-  expect((await spawn('designer', 'Tidy web/board.tsx')).model).toBe('opus')
+  const ledger = (files.get('/u/.claude/switchboard/smart-picks.d/chat-learn-meter.jsonl') ?? '').split('\n').filter(Boolean).map(l => JSON.parse(l))
+  const fin = ledger.find(r => r.t === 'final' && r.kind === 'model')
+  expect(fin).toMatchObject({ final: 'fable', session: 'chat-learn' })
+  expect(ledger.some(r => r.t === 'pick' && r.key === fin.key)).toBe(true)
+  expect((await spawn('designer', 'Tidy web/board.tsx')).model).toBe('fable')
   // Smart switch off: the agent file alone.
   company = { smartModelSwitch: false }
   now += 11_000
   expect((await spawn('designer', 'Tidy web/board.tsx')).model).toBe('sonnet')
+})
+
+test('a spawn logs role and model picks; an escalation logs the model final', async ($, on) => {
+  const files = new Map<string, string>([['/u/.claude/agents/designer.md', '---\nname: designer\nmodel: sonnet\n---\n']])
+  on('env.get', (_, e) => ({ value: e.name === 'HOME' ? '/u' : undefined }))
+  on('session.id', () => ({ value: 'chat-smart' }))
+  on('session.cwd', () => ({ value: '/u/App' }))
+  on('clock.now', () => ({ value: Date.parse('2026-11-11T00:00:00Z') }))
+  on('clock.sleep', () => new Promise(() => {}))
+  storeOn(on as never)
+  on('fs.stat', (_, e) => (files.has(String(e.path)) ? { value: { kind: 'file', size: 1, mtimeMs: 1, isLink: false } } : Promise.reject(new Error('missing'))))
+  on('fs.list', () => ({ value: [] }))
+  on('fs.read', (_, e) => (files.has(String(e.path)) ? { value: files.get(String(e.path)) } : Promise.reject(new Error('missing'))))
+  on('fs.write', (_, e) => { files.set(String(e.path), String(e.text)); return { value: undefined } })
+  on('http.fetch', () => new Promise(() => {}))
+  let n = 0
+  on('agent.spawn', (_, e) => ({ model: e.model ?? 'inherited', agentId: `a${++n}` }))
+  on('tool.call', () => ({ result: {} }))
+  on('turn.complete', () => ({ text: '' }))
+  const rows = () => (files.get('/u/.claude/switchboard/smart-picks.d/chat-smart-meter.jsonl') ?? '').split('\n').filter(Boolean).map(l => JSON.parse(l))
+  files.set('/u/.claude/switchboard/smart-picks.jsonl', '{"t":"pick","session":"ext"}\n')
+  const s = await $.agent.spawn({ subagentType: 'designer', prompt: 'Fix the crash in web/board.tsx', description: 'x' } as never)
+  expect(rows()).toEqual([
+    expect.objectContaining({ t: 'pick', kind: 'role', task: 'fix', pick: 'designer', session: 'chat-smart', cwd: '/u/App' }),
+    expect.objectContaining({ t: 'pick', kind: 'model', task: 'fix', pick: 'sonnet', why: expect.stringContaining('Auto: ') }),
+  ])
+  // the shared ledger is the extension's: never rewritten from here
+  expect(files.get('/u/.claude/switchboard/smart-picks.jsonl')).toBe('{"t":"pick","session":"ext"}\n')
+  // a model the Agent call sets is logged as such, with the platform's swap as a final
+  await $.agent.spawn({ subagentType: 'ops', prompt: 'notes', description: 'x', model: 'haiku' } as never)
+  expect(rows().slice(2).map(r => [r.kind, r.pick ?? r.final, r.why])).toEqual([['role', 'ops', 'ops for a other task'], ['model', 'haiku', 'set by the Agent call']])
+  // learned stats move the model pick
+  files.set('/u/.claude/switchboard/smart-learned.json', JSON.stringify({ stats: { model: { fix: { sonnet: { n: 10, useful: 2 }, opus: { n: 8, useful: 8 } } } } }))
+  const learned = await $.agent.spawn({ subagentType: 'designer', prompt: 'Fix the crash in web/board.tsx', description: 'x' } as never)
+  expect(learned.model).toBe('opus')
+  expect(rows().filter(r => r.kind === 'model').at(-1)).toMatchObject({ pick: 'opus', why: 'learned: opus kept 100% of 8' })
+  void s
 })
 
 test('keeps another chat\'s learned entry when its write lands over ours', async ($, on) => {
@@ -421,8 +510,8 @@ test('a handoff item writes the note and tells the hub, whatever the context', a
       // The plan changed last, not the last name in the folder.
       list: async (dir: string) => (dir.includes('plans')
         ? [{ name: '2026-10-23-switchboard.md', kind: 'file', mtimeMs: 2 }, { name: 'p4-map.md', kind: 'file', mtimeMs: 1 }]
-        : [{ name: 'w.json', kind: 'file' }]),
-      read: async (path: string) => (path.endsWith('w.json') ? JSON.stringify({ port: 7, workspace: '/u/Armasu', hubToken: 't' }) : ''),
+        : [{ name: 'a-1.json', kind: 'file' }]),
+      read: async (path: string) => (path.endsWith('a-1.json') ? JSON.stringify({ port: 7, workspace: '/u/Armasu', hubToken: 't' }) : ''),
       write: async (path: string, note: string) => { written.push(path); notes.push(note) },
     },
     http: { fetch: async (url: string, init?: { body?: string }) => {
@@ -446,8 +535,8 @@ test('a handoff with no plan or task is named continued, and tells the hub no pl
     session: { cwd: async () => '/u/Armasu/My Proj', id: async () => '602f6c02-aaaa', usage: async () => ({ context: { tokens: 1 } }) },
     clock: { now: async () => Date.parse('2026-10-27T20:03:00Z') },
     fs: {
-      list: async (dir: string) => (dir.includes('plans') ? [] : [{ name: 'w.json', kind: 'file' }]),
-      read: async (path: string) => (path.endsWith('w.json') ? JSON.stringify({ port: 7, workspace: '/u/Armasu', hubToken: 't' }) : ''),
+      list: async (dir: string) => (dir.includes('plans') ? [] : [{ name: 'a-1.json', kind: 'file' }]),
+      read: async (path: string) => (path.endsWith('a-1.json') ? JSON.stringify({ port: 7, workspace: '/u/Armasu', hubToken: 't' }) : ''),
       write: async (path: string) => { written.push(path) },
     },
     http: { fetch: async (url: string, init?: { body?: string }) => { posts.push(init?.body ?? ''); return { status: 200, ok: true, text: '{}' } } },
@@ -476,8 +565,8 @@ test('hub_recall asks the window holding this folder for what memory knows, even
   on('clock.now', () => ({ value: 9.1e12 }))
   on('session.cwd', () => ({ value: '/u/Armasu' }))
   on('session.id', () => ({ value: 'chat-recall' }))
-  on('fs.list', () => ({ value: [{ name: 'w.json', kind: 'file', size: 10, mtimeMs: 0, isLink: false }] }))
-  on('fs.read', (_, e) => ({ value: String(e.path).endsWith('w.json') ? JSON.stringify({ port: 7, workspace: '/u/Armasu', hubToken: 't' }) : String(e.path).endsWith('company.json') ? '{"paused":true}' : '' }))
+  on('fs.list', () => ({ value: [{ name: 'a-1.json', kind: 'file', size: 10, mtimeMs: 0, isLink: false }] }))
+  on('fs.read', (_, e) => ({ value: String(e.path).endsWith('a-1.json') ? JSON.stringify({ port: 7, workspace: '/u/Armasu', hubToken: 't' }) : String(e.path).endsWith('company.json') ? '{"paused":true}' : '' }))
   on('http.fetch', (_, e) => { asked.push({ url: e.url, token: (e.init?.headers as Record<string, string> | undefined)?.['X-Switchboard-Token'] }); return { value: { status: 200, ok: true, headers: {}, text: 'hub-recall: how chats query memory' } } })
   on('tool.call', () => ({ result: {} }))
   const ran = await $.tool.call({ tool: 'mcp__usage-meter__hub_recall', query: 'hub recall' })
@@ -497,8 +586,8 @@ test('an agent start posts the day it counts on, so the hub drops yesterday', as
   on('clock.now', () => ({ value: 9.9e12 }))
   on('store.get', () => ({ value: undefined }))
   on('store.set', () => ({ value: undefined }))
-  on('fs.list', () => ({ value: [{ name: 'w.json', kind: 'file', size: 10, mtimeMs: 0, isLink: false }] }))
-  on('fs.read', (_, e) => ({ value: String(e.path).endsWith('w.json') ? JSON.stringify({ port: 7, workspace: '/u', hubToken: 't' }) : '' }))
+  on('fs.list', () => ({ value: [{ name: 'a-1.json', kind: 'file', size: 10, mtimeMs: 0, isLink: false }] }))
+  on('fs.read', (_, e) => ({ value: String(e.path).endsWith('a-1.json') ? JSON.stringify({ port: 7, workspace: '/u', hubToken: 't' }) : '' }))
   on('http.fetch', (_, e) => { posts.push(String(e.init?.body ?? '')); return { value: { status: 204, ok: true, headers: {}, text: '' } } })
   on('agent.spawn', (_, e) => ({ model: e.model ?? 'opus' }))
   await $.agent.spawn({ subagentType: 'engineer', prompt: 'x', description: 'x' } as never)
@@ -517,8 +606,8 @@ test('a handoff names the plan this chat opened, not the one another chat touche
     session: { cwd: async () => '/u/Armasu', id: async () => 'chat-plan', usage: async () => ({ context: { tokens: 1 } }) },
     clock: { now: async () => 9.6e12 },
     fs: {
-      list: async (dir: string) => (dir.includes('plans') ? [{ name: 'newer.md', kind: 'file', mtimeMs: 9 }] : [{ name: 'w.json', kind: 'file' }]),
-      read: async (path: string) => (path.endsWith('w.json') ? JSON.stringify({ port: 7, workspace: '/u/Armasu', hubToken: 't' })
+      list: async (dir: string) => (dir.includes('plans') ? [{ name: 'newer.md', kind: 'file', mtimeMs: 9 }] : [{ name: 'a-1.json', kind: 'file' }]),
+      read: async (path: string) => (path.endsWith('a-1.json') ? JSON.stringify({ port: 7, workspace: '/u/Armasu', hubToken: 't' })
         : path.endsWith('mine.md') ? '### Task 3: Name the fresh chat\n\n- [ ] **Step 1: x**' : ''),
       write: async (_: string, note: string) => { notes.push(note) },
     },
@@ -623,8 +712,8 @@ test('the trigger remembers the note per session and fills it from the task list
     agent: { list: async () => [{ id: 'a', type: 'engineer', description: 'fix the hook', status: 'running' }, { id: 'b', type: 'qa', description: 'old run', status: 'completed' }] },
     process: { run: async () => ({ exitCode: 0, stdout: ' M hooks/register.ts\n?? new.ts\n', stderr: '' }) },
     fs: {
-      list: async (dir: string) => (dir.includes('plans') ? [] : [{ name: 'w.json', kind: 'file' }]),
-      read: async (path: string) => (path.endsWith('w.json') ? JSON.stringify({ port: 7, workspace: '/u/Armasu', hubToken: 't' }) : ''),
+      list: async (dir: string) => (dir.includes('plans') ? [] : [{ name: 'a-1.json', kind: 'file' }]),
+      read: async (path: string) => (path.endsWith('a-1.json') ? JSON.stringify({ port: 7, workspace: '/u/Armasu', hubToken: 't' }) : ''),
       write: async (_: string, note: string) => { notes.push(note) },
     },
     http: { fetch: async () => ({ status: 200, ok: true, text: '{}' }) },
@@ -838,8 +927,8 @@ test('a reloaded mod does not hand off a session twice', async () => {
     clock: { now: async () => 9.8e12 },
     store: { get: async (k: string) => kept.get(k), set: async (k: string, v: unknown) => { kept.set(k, v) } },
     fs: {
-      list: async (dir: string) => (dir.includes('plans') ? [] : [{ name: 'w.json', kind: 'file' }]),
-      read: async (path: string) => (path.endsWith('w.json') ? JSON.stringify({ port: 7, workspace: '/u/Armasu', hubToken: 't' }) : ''),
+      list: async (dir: string) => (dir.includes('plans') ? [] : [{ name: 'a-1.json', kind: 'file' }]),
+      read: async (path: string) => (path.endsWith('a-1.json') ? JSON.stringify({ port: 7, workspace: '/u/Armasu', hubToken: 't' }) : ''),
       write: async (path: string) => { written.push(path) },
     },
     http: { fetch: async () => ({ status: 200, ok: true, text: '{}' }) },
@@ -859,8 +948,8 @@ test('a handoff asked for again posts the kept note once more, forced, without a
     clock: { now: async () => 9.9e12 },
     store: { get: async (k: string) => kept.get(k), set: async (k: string, v: unknown) => { kept.set(k, v) } },
     fs: {
-      list: async (dir: string) => (dir.includes('plans') ? [] : [{ name: 'w.json', kind: 'file' }]),
-      read: async (path: string) => (path.endsWith('w.json') ? JSON.stringify({ port: 7, workspace: '/u/Armasu', hubToken: 't' }) : ''),
+      list: async (dir: string) => (dir.includes('plans') ? [] : [{ name: 'a-1.json', kind: 'file' }]),
+      read: async (path: string) => (path.endsWith('a-1.json') ? JSON.stringify({ port: 7, workspace: '/u/Armasu', hubToken: 't' }) : ''),
       write: async (path: string) => { written.push(path) },
     },
     http: { fetch: async (url: string, init?: { body?: string }) => { posts.push(`${url} ${init?.body ?? ''}`); return { status: 200, ok: true, text: '{"onFull":"fresh"}' } } },
@@ -884,8 +973,10 @@ test('tracks background shells from start to TaskStop or their notification', ()
   noteShell('Bash', { command: 'npm run dev', run_in_background: true }, { backgroundTaskId: 'b1' }, 'Command running in background with ID: b1. Output is being written to: /t/b1.output')
   noteShell('Bash', { command: 'sleep 9', run_in_background: true }, { backgroundTaskId: 'b2' }, '')
   noteShell('Bash', { command: 'ls' }, {}, '')
-  expect(liveShells()).toEqual([{ id: 'b1', command: 'npm run dev', output: '/t/b1.output' }, { id: 'b2', command: 'sleep 9' }])
+  noteShell('Bash', { command: 'pnpm dev', timeout: 3000 }, { backgroundTaskId: 'b3' }, '')
+  expect(liveShells()).toEqual([{ id: 'b1', command: 'npm run dev', output: '/t/b1.output' }, { id: 'b2', command: 'sleep 9' }, { id: 'b3', command: 'pnpm dev' }])
   noteShell('TaskStop', { task_id: 'b1' }, {}, '')
+  noteShell('TaskStop', { task_id: 'b3' }, {}, '')
   shellsDone('<task-notification>\n<task-id>b2</task-id>\n<status>completed</status>\n</task-notification>')
   expect(liveShells()).toEqual([])
 })
@@ -935,8 +1026,8 @@ test('near full, the chat first wraps up; the handoff waits until no subagent or
   on('clock.now', () => ({ value: 9.91e12 }))
   on('agent.list', () => ({ value: agents }))
   on('process.run', () => ({ value: { exitCode: 0, stdout: '', stderr: '' } }))
-  on('fs.list', (_, e) => ({ value: String(e.path).includes('plans') ? [] : [{ name: 'w.json', kind: 'file', size: 1, mtimeMs: 0, isLink: false }] }))
-  on('fs.read', (_, e) => ({ value: String(e.path).endsWith('w.json') ? JSON.stringify({ port: 7, workspace: '/u/Armasu', hubToken: 't' }) : '' }))
+  on('fs.list', (_, e) => ({ value: String(e.path).includes('plans') ? [] : [{ name: 'a-1.json', kind: 'file', size: 1, mtimeMs: 0, isLink: false }] }))
+  on('fs.read', (_, e) => ({ value: String(e.path).endsWith('a-1.json') ? JSON.stringify({ port: 7, workspace: '/u/Armasu', hubToken: 't' }) : '' }))
   on('fs.write', (_, e) => { notes.push(String(e.text)); return { value: undefined } })
   on('http.fetch', (_, e) => { posts.push(`${e.url} ${e.init?.body ?? ''}`); return { value: { status: 200, ok: true, headers: {}, text: String(e.url).includes('/hub/keep') ? '{"onFull":"fresh"}' : '' } } })
   on('ui.toast', () => ({ value: undefined }))
@@ -981,8 +1072,8 @@ test('at the hard limit the handoff goes anyway and lists what still runs', asyn
   on('clock.now', () => ({ value: 9.92e12 }))
   on('agent.list', () => ({ value: [{ id: 'q7', type: 'qa', description: 'rerun', status: 'running' }] }))
   on('process.run', () => ({ value: { exitCode: 0, stdout: '', stderr: '' } }))
-  on('fs.list', (_, e) => ({ value: String(e.path).includes('plans') ? [] : [{ name: 'w.json', kind: 'file', size: 1, mtimeMs: 0, isLink: false }] }))
-  on('fs.read', (_, e) => ({ value: String(e.path).endsWith('w.json') ? JSON.stringify({ port: 7, workspace: '/u/Armasu', hubToken: 't' }) : '' }))
+  on('fs.list', (_, e) => ({ value: String(e.path).includes('plans') ? [] : [{ name: 'a-1.json', kind: 'file', size: 1, mtimeMs: 0, isLink: false }] }))
+  on('fs.read', (_, e) => ({ value: String(e.path).endsWith('a-1.json') ? JSON.stringify({ port: 7, workspace: '/u/Armasu', hubToken: 't' }) : '' }))
   on('fs.write', (_, e) => { notes.push(String(e.text)); return { value: undefined } })
   on('http.fetch', (_, e) => { posts.push(String(e.init?.body ?? '')); return { value: { status: 200, ok: true, headers: {}, text: String(e.url).includes('/hub/keep') ? '{"onFull":"fresh"}' : '' } } })
   on('ui.toast', () => ({ value: undefined }))
@@ -1006,8 +1097,8 @@ test('a reload keeps the task list, last request and errors from the store', asy
     clock: { now: async () => 9.93e12 },
     store: { get: async (k: string) => kept.get(k), set: async (k: string, v: unknown) => { kept.set(k, v) } },
     fs: {
-      list: async (dir: string) => (dir.includes('plans') ? [] : [{ name: 'w.json', kind: 'file' }]),
-      read: async (path: string) => (path.endsWith('w.json') ? JSON.stringify({ port: 7, workspace: '/u/Armasu', hubToken: 't' }) : ''),
+      list: async (dir: string) => (dir.includes('plans') ? [] : [{ name: 'a-1.json', kind: 'file' }]),
+      read: async (path: string) => (path.endsWith('a-1.json') ? JSON.stringify({ port: 7, workspace: '/u/Armasu', hubToken: 't' }) : ''),
       write: async (_: string, note: string) => { notes.push(note) },
     },
     http: { fetch: async () => ({ status: 200, ok: true, text: '{}' }) },
@@ -1062,8 +1153,8 @@ function pauseRig(on: (op: never, fn: never) => void, id: string, o: { tokens: (
   h('agent.list', () => ({ value: o.agents?.() ?? [] }))
   // tail -c N on the chat's transcript: its last N characters.
   h('process.run', (_, e) => ({ value: { exitCode: 0, stdout: e.argv[0] === 'tail' && e.argv[3] === `/u/.claude/projects/-u-Armasu/${id}.jsonl` ? (o.transcript ?? '').slice(-Number(e.argv[2])) : '', stderr: '' } }))
-  h('fs.list', (_, e) => ({ value: String(e.path).includes('plans') ? [] : [{ name: 'w.json', kind: 'file', size: 1, mtimeMs: 0, isLink: false }] }))
-  h('fs.read', (_, e) => ({ value: String(e.path).endsWith('w.json') ? JSON.stringify({ port: 7, workspace: '/u/Armasu', hubToken: 't' }) : '' }))
+  h('fs.list', (_, e) => ({ value: String(e.path).includes('plans') ? [] : [{ name: 'a-1.json', kind: 'file', size: 1, mtimeMs: 0, isLink: false }] }))
+  h('fs.read', (_, e) => ({ value: String(e.path).endsWith('a-1.json') ? JSON.stringify({ port: 7, workspace: '/u/Armasu', hubToken: 't' }) : '' }))
   h('fs.write', (_, e) => { o.notes.push(String(e.text)); return { value: undefined } })
   h('http.fetch', (_, e) => {
     o.posts.push(String(e.init?.body ?? ''))
@@ -1188,8 +1279,8 @@ test('two handoffs at once write one note and post once', async () => {
     clock: { now: async () => 9.96e12 },
     store: { get: async (k: string) => kept.get(k), set: async (k: string, v: unknown) => { kept.set(k, v) } },
     fs: {
-      list: async (dir: string) => (dir.includes('plans') ? [] : [{ name: 'w.json', kind: 'file' }]),
-      read: async (path: string) => (path.endsWith('w.json') ? JSON.stringify({ port: 7, workspace: '/u/Armasu', hubToken: 't' }) : ''),
+      list: async (dir: string) => (dir.includes('plans') ? [] : [{ name: 'a-1.json', kind: 'file' }]),
+      read: async (path: string) => (path.endsWith('a-1.json') ? JSON.stringify({ port: 7, workspace: '/u/Armasu', hubToken: 't' }) : ''),
       write: async (path: string) => { written.push(path) },
     },
     http: { fetch: async (url: string, init?: { body?: string }) => { posts.push(init?.body ?? ''); return { status: 200, ok: true, text: '{}' } } },
@@ -1209,8 +1300,8 @@ test('a new session in the same process forgets the last one\'s plan, file and p
     clock: { now: async () => 9.97e12 },
     store: { get: async () => undefined, set: async () => undefined },
     fs: {
-      list: async (dir: string) => (dir.includes('plans') ? [] : [{ name: 'w.json', kind: 'file' }]),
-      read: async (path: string) => (path.endsWith('w.json') ? JSON.stringify({ port: 7, workspace: '/u/Armasu', hubToken: 't' }) : ''),
+      list: async (dir: string) => (dir.includes('plans') ? [] : [{ name: 'a-1.json', kind: 'file' }]),
+      read: async (path: string) => (path.endsWith('a-1.json') ? JSON.stringify({ port: 7, workspace: '/u/Armasu', hubToken: 't' }) : ''),
       write: async (_: string, note: string) => { notes.push(note) },
     },
     http: { fetch: async () => ({ status: 200, ok: true, text: '{}' }) },
@@ -1341,10 +1432,10 @@ test('a frozen window holds no chat: session start ends and the other window sti
   on('store.get', () => ({ value: undefined }))
   on('store.set', () => ({ value: undefined }))
   on('fs.list', () => ({ value: [
-    { name: 'a.json', kind: 'file', size: 10, mtimeMs: 0, isLink: false },
-    { name: 'b.json', kind: 'file', size: 10, mtimeMs: 0, isLink: false },
+    { name: 'a-1.json', kind: 'file', size: 10, mtimeMs: 0, isLink: false },
+    { name: 'b-2.json', kind: 'file', size: 10, mtimeMs: 0, isLink: false },
   ] }))
-  on('fs.read', (_, e) => ({ value: JSON.stringify({ port: String(e.path).endsWith('a.json') ? 1 : 2, workspace: '/Users/k/Frozen', hubToken: 't' }) }))
+  on('fs.read', (_, e) => ({ value: JSON.stringify({ port: String(e.path).endsWith('a-1.json') ? 1 : 2, workspace: '/Users/k/Frozen', hubToken: 't' }) }))
   on('http.fetch', (_, e) => {
     posts.push(`${e.url} ${e.init?.body ?? ''}`)
     // Port 1 is a window that never answers.
@@ -1362,8 +1453,8 @@ test('an agent start never waits on the hub post', async ($, on) => {
   on('clock.sleep', () => new Promise(() => {}))
   on('store.get', () => ({ value: undefined }))
   on('store.set', () => ({ value: undefined }))
-  on('fs.list', () => ({ value: [{ name: 'w.json', kind: 'file', size: 10, mtimeMs: 0, isLink: false }] }))
-  on('fs.read', (_, e) => ({ value: String(e.path).endsWith('w.json') ? JSON.stringify({ port: 7, workspace: '/u', hubToken: 't' }) : '' }))
+  on('fs.list', () => ({ value: [{ name: 'a-1.json', kind: 'file', size: 10, mtimeMs: 0, isLink: false }] }))
+  on('fs.read', (_, e) => ({ value: String(e.path).endsWith('a-1.json') ? JSON.stringify({ port: 7, workspace: '/u', hubToken: 't' }) : '' }))
   on('http.fetch', () => new Promise(() => {}))
   on('agent.spawn', (_, e) => ({ model: e.model ?? 'opus' }))
   const started = await $.agent.spawn({ subagentType: 'researcher', prompt: 'x', description: 'x' } as never)
@@ -1414,8 +1505,8 @@ test('a handoff the window refused is not remembered, says so, and can be tried 
     clock: { now: async () => 9.7e12 },
     store: { get: async (k: string) => kept.get(k), set: async (k: string, v: unknown) => { kept.set(k, v) } },
     fs: {
-      list: async (dir: string) => (dir.includes('plans') ? [] : [{ name: 'w.json', kind: 'file' }]),
-      read: async (path: string) => (path.endsWith('w.json') ? JSON.stringify({ port: 7, workspace: '/u/Armasu', hubToken: 't' }) : ''),
+      list: async (dir: string) => (dir.includes('plans') ? [] : [{ name: 'a-1.json', kind: 'file' }]),
+      read: async (path: string) => (path.endsWith('a-1.json') ? JSON.stringify({ port: 7, workspace: '/u/Armasu', hubToken: 't' }) : ''),
       write: async (path: string) => { written.push(path) },
     },
     http: { fetch: async (url: string) => (url.includes('/hub/keep') ? { status: 200, ok: true, text: '{"onFull":"fresh"}' } : { status: 500, ok: false, text: '' }) },
@@ -1438,8 +1529,8 @@ test('after a refused handoff, settles wait before writing another note; a force
     clock: { now: async () => 1e13 },
     store: { get: async () => undefined, set: async () => {} },
     fs: {
-      list: async (dir: string) => (dir.includes('plans') ? [] : [{ name: 'w.json', kind: 'file' }]),
-      read: async (path: string) => (path.endsWith('w.json') ? JSON.stringify({ port: 7, workspace: '/u/Armasu', hubToken: 't' }) : ''),
+      list: async (dir: string) => (dir.includes('plans') ? [] : [{ name: 'a-1.json', kind: 'file' }]),
+      read: async (path: string) => (path.endsWith('a-1.json') ? JSON.stringify({ port: 7, workspace: '/u/Armasu', hubToken: 't' }) : ''),
       write: async (path: string) => { written.push(path) },
     },
     http: { fetch: async (url: string) => (url.includes('/hub/keep') ? { status: 200, ok: true, text: '{"onFull":"fresh"}' } : up ? { status: 200, ok: true, text: '' } : { status: 500, ok: false, text: '' }) },
@@ -1462,8 +1553,8 @@ test('an edit counts as the chat file only once it ran, never when denied', asyn
   on('clock.now', () => ({ value: now }))
   on('store.get', () => ({ value: undefined }))
   on('store.set', () => ({ value: undefined }))
-  on('fs.list', () => ({ value: [{ name: 'w.json', kind: 'file', size: 10, mtimeMs: 0, isLink: false }] }))
-  on('fs.read', (_, e) => ({ value: String(e.path).endsWith('w.json') ? JSON.stringify({ port: 7, workspace: '/u/Armasu', hubToken: 't' }) : '' }))
+  on('fs.list', () => ({ value: [{ name: 'a-1.json', kind: 'file', size: 10, mtimeMs: 0, isLink: false }] }))
+  on('fs.read', (_, e) => ({ value: String(e.path).endsWith('a-1.json') ? JSON.stringify({ port: 7, workspace: '/u/Armasu', hubToken: 't' }) : '' }))
   on('http.fetch', (_, e) => { posts.push(String(e.init?.body ?? '')); return { value: { status: 204, ok: true, headers: {}, text: '' } } })
   on('session.model', () => ({ value: 'claude-opus-5-5' }))
   on('session.usage', () => ({ value: { context: { tokens: 1, window: 1_000_000, percent: 0 }, rateLimits: [], startedAt: 0 } }))
@@ -1672,6 +1763,8 @@ function indDouble(o: { id: string; flags: Record<string, unknown> | 'bad' | und
 }
 
 test('run indefinitely reads the flag file for this chat, missing or bad means off', async () => {
+  expect(gateShell('npm test', true)).toEqual(['cmd.exe', '/d', '/s', '/c', 'npm test'])
+  expect(gateShell('npm test', false)).toEqual(['/bin/sh', '-c', 'npm test'])
   expect(await indefiniteOn(indDouble({ id: 'i1', flags: { i1: 5, other: 9 } }).$)).toBe(5)
   expect(await indefiniteOn(indDouble({ id: 'i2', flags: { i1: 5 } }).$)).toBeUndefined()
   expect(await indefiniteOn(indDouble({ id: 'i3', flags: 'bad' }).$)).toBeUndefined()
@@ -1870,4 +1963,189 @@ test('the ask rule under Run indefinitely asks everything up front, then decides
   const rule = await indefiniteAsk(indDouble({ id: 'm3', flags: { m3: 1 } }).$)
   expect(rule).toMatch(/one AskUserQuestion round/)
   expect(rule).toMatch(/after that, decide yourself/i)
+})
+
+test('a spawn is auto-picked from its brief, an explicit model wins, the 5h gate holds the top models', async ($, on) => {
+  const files = new Map<string, string>([
+    ['/u/.claude/agents/engineer.md', '---\nname: engineer\nmodel: sonnet\n---\n'],
+    ['/u/.claude/agents/ops.md', '---\nname: ops\nmodel: inherit\n---\n'],
+  ])
+  let company: unknown = {}
+  let five = 10
+  let resetsAt = '2026-11-20T03:00:00Z'
+  on('env.get', (_, e) => ({ value: e.name === 'HOME' ? '/u' : undefined }))
+  on('session.id', () => ({ value: 'chat-pick' }))
+  on('session.cwd', () => ({ value: '/u/App' }))
+  let now = Date.parse('2026-11-20T00:00:00Z')
+  on('clock.now', () => ({ value: now }))
+  on('clock.sleep', () => new Promise(() => {}))
+  storeOn(on as never)
+  on('fs.stat', (_, e) => (files.has(String(e.path)) ? { value: { kind: 'file', size: 1, mtimeMs: 1, isLink: false } } : Promise.reject(new Error('missing'))))
+  on('fs.list', () => ({ value: [] }))
+  on('fs.read', (_, e) => {
+    const p = String(e.path)
+    if (p.endsWith('company.json')) return { value: JSON.stringify(company) }
+    if (p.endsWith('limits.json')) return { value: JSON.stringify({ windows: [{ kind: 'five_hour', percentUsed: five, resetsAt }] }) }
+    return files.has(p) ? { value: files.get(p) } : Promise.reject(new Error('missing'))
+  })
+  on('fs.write', (_, e) => { files.set(String(e.path), String(e.text)); return { value: undefined } })
+  on('http.fetch', () => new Promise(() => {}))
+  on('agent.spawn', (_, e) => ({ model: e.model ?? 'inherited', agentId: 'a1' }))
+  const spawn = (subagentType: string, prompt: string, model?: string) => $.agent.spawn({ subagentType, prompt, description: 'x', model } as never)
+  const hard = 'rewrite the scheduler as a state machine and find the root cause of the deadlock in extension/src/hub/todo.ts'
+  expect((await spawn('engineer', 'add a field to the form in web/form.tsx')).model).toBe('sonnet')
+  expect((await spawn('engineer', 'rename hubState to hub in extension/src/hub/routes.ts')).model).toBe('haiku')
+  expect((await spawn('engineer', 'fix the race in chat-wait where two chats write links.json at once')).model).toBe('opus')
+  expect((await spawn('engineer', hard)).model).toBe('fable')
+  expect((await spawn('engineer', hard, 'haiku')).model).toBe('haiku')
+  expect((await spawn('ops', 'write notes')).model).toBe('inherited')
+  expect((await spawn('bland:norm', 'rewrite everything')).model).toBe('inherited')
+  five = 72
+  now += 11_000
+  expect((await spawn('engineer', hard)).model).toBe('opus')
+  resetsAt = '2026-11-19T23:00:00Z'
+  now += 11_000
+  expect((await spawn('engineer', hard)).model).toBe('fable')
+  company = { smartModelSwitch: false }
+  now += 11_000
+  expect((await spawn('engineer', 'rename hubState to hub in extension/src/hub/routes.ts')).model).toBe('sonnet')
+})
+
+test('the first prompt of a chat that reads like research is offered to the home window, once', async ($, on) => {
+  const asked: string[] = []
+  let cwd = '/u/App'
+  let id = 'chat-research-1'
+  on('env.get', () => ({ value: '/u' }))
+  on('clock.now', () => ({ value: 9.2e12 }))
+  on('session.cwd', () => ({ value: cwd }))
+  on('session.id', () => ({ value: id }))
+  on('fs.list', () => ({ value: [{ name: 'a-1.json', kind: 'file', size: 10, mtimeMs: 0, isLink: false }] }))
+  on('fs.read', (_, e) => ({ value: String(e.path).endsWith('a-1.json') ? JSON.stringify({ port: 7, workspace: '/u', hubToken: 't' }) : '' }))
+  on('http.fetch', (_, e) => { asked.push(String(e.url)); return { value: { status: 200, ok: true, headers: {}, text: '' } } })
+  on('prompt.submit', (_, e) => ({ text: e.text }))
+  storeOn(on as never)
+  const offers = () => asked.filter(u => u.includes('/hub/research-offer'))
+  const send = async (text: string) => { await $.prompt.submit({ text }); await new Promise(r => setTimeout(r, 20)) }
+  await send('fix the typo in web/page.tsx')
+  expect(offers()).toEqual([])
+  id = 'chat-research-2'
+  await send('look up how other tools route models and compare them, with sources')
+  expect(offers().length).toBe(1)
+  const q = JSON.parse(decodeURIComponent(/[?&]q=([^&]*)/.exec(offers()[0])![1]))
+  expect(q).toMatchObject({ sessionId: 'chat-research-2', reason: 'look up, compare, sources' })
+  expect(q.score).toBe(6)
+  await send('look up more sources on this')
+  expect(offers().length).toBe(1)
+  cwd = '/u/Documents/Research/routing'
+  id = 'chat-research-3'
+  await send('look up how other tools route models and compare them, with sources')
+  expect(offers().length).toBe(1)
+})
+
+test('hub_recall passes its scope on, and only a known one', async ($, on) => {
+  const asked: string[] = []
+  on('env.get', () => ({ value: '/u' }))
+  on('clock.now', () => ({ value: 9.3e12 }))
+  on('session.cwd', () => ({ value: '/u/Armasu' }))
+  on('session.id', () => ({ value: 'chat-recall-scope' }))
+  on('fs.list', () => ({ value: [{ name: 'a-1.json', kind: 'file', size: 10, mtimeMs: 0, isLink: false }] }))
+  on('fs.read', (_, e) => ({ value: String(e.path).endsWith('a-1.json') ? JSON.stringify({ port: 7, workspace: '/u/Armasu', hubToken: 't' }) : '' }))
+  on('http.fetch', (_, e) => { asked.push(String(e.url)); return { value: { status: 200, ok: true, headers: {}, text: 'ok' } } })
+  on('tool.call', () => ({ result: {} }))
+  const recall = async (extra: object) => { asked.length = 0; await $.tool.call({ tool: 'mcp__usage-meter__hub_recall', query: 'routing', ...extra }); return asked.find(u => u.includes('/hub/recall'))! }
+  expect(await recall({ scope: 'research' })).toContain('&scope=research')
+  expect(await recall({ scope: 'all' })).toContain('&scope=all')
+  expect(await recall({ scope: 'bogus' })).not.toContain('scope=')
+  expect(await recall({})).not.toContain('scope=')
+})
+
+test('a round qa or the gate sent back reruns one model step up', () => {
+  const P = '/u/App', brief = 'Fix the parser in src/parse.ts'
+  const done = (o: Partial<Run>): Run => ({ role: 'engineer', brief, model: 'sonnet', files: [`${P}/src/parse.ts`], clean: true, round: 1, ...o })
+  const pick = (runs: Run[]) => spawnModel('sonnet', 'engineer', brief, [], P, 0, runs)
+  const first = pick([])
+  expect(first).toBe('sonnet')
+  // qa found problems, the gate's failure in the brief, or the run itself was not clean: one step up
+  expect(pick([done({}), done({ role: 'qa', clean: false })])).toBe('opus')
+  expect(spawnModel('sonnet', 'engineer', 'Typecheck fails in src/parse.ts: TS2345 on line 4', [], P, 0, [done({})])).toBe('opus')
+  expect(pick([done({ clean: false })])).toBe('opus')
+  // a clean round with no qa yet and no failure is follow-up work
+  expect(pick([done({})])).toBe(first)
+  // one step above the pick, never past opus or the role's ceiling
+  expect(pick([done({ model: 'claude-opus-5-5', clean: false })])).toBe('opus')
+  expect(spawnModel('opus', 'designer', 'Redesign src/parse.ts', [], P, 0, [done({ role: 'designer', clean: false })])).toBe('opus')
+  expect(spawnModel('haiku', 'ops', brief, [], P, 0, [done({ role: 'ops', clean: false })])).toBe('sonnet')
+  // a clean qa since, other files, or a qa rerun is no send back
+  expect(pick([done({}), done({ role: 'qa', clean: true })])).toBe(first)
+  expect(pick([done({ files: [`${P}/src/other.ts`], clean: false })])).toBe(first)
+  expect(spawnModel('sonnet', 'qa', brief, [], P, 0, [done({ role: 'qa', clean: false })])).toBe(spawnModel('sonnet', 'qa', brief, [], P, 0, []))
+})
+
+test('hub_recall asks the window that started last, then older ones, a crashed window on the same folder too', async ($, on) => {
+  const asked: string[] = []
+  let down: number | undefined, newest = '/u/Other'
+  on('env.get', () => ({ value: '/u' }))
+  on('clock.now', () => ({ value: 9.5e12 }))
+  on('process.run', () => new Promise(() => {}) as never)
+  on('session.cwd', () => ({ value: '/u/Armasu' }))
+  on('session.id', () => ({ value: 'chat-recall-newest' }))
+  on('fs.list', () => ({ value: [['aaa-1.json', 1], ['bbb-2.json', 2]].map(([name, mtimeMs]) => ({ name: String(name), kind: 'file' as const, size: 10, mtimeMs: Number(mtimeMs), isLink: false })) }))
+  on('fs.read', (_, e) => ({ value: String(e.path).endsWith('aaa-1.json') ? JSON.stringify({ port: 7, workspace: '/u/Armasu', hubToken: 't' }) : String(e.path).endsWith('bbb-2.json') ? JSON.stringify({ port: 8, workspace: newest, hubToken: 'n' }) : '' }))
+  on('http.fetch', (_, e) => {
+    const port = Number(new URL(e.url).port)
+    if (e.url.includes('/hub/recall') || e.url.includes('/hub/ask')) asked.push(`${port}${new URL(e.url).pathname}`)
+    if (port === down) throw new Error('refused')
+    return { value: { status: 200, ok: true, headers: {}, text: `from ${port}` } }
+  })
+  on('tool.call', () => ({ result: {} }))
+  const call = async (tool: string, input: object) => { asked.length = 0; return JSON.stringify(await $.tool.call({ tool: `mcp__usage-meter__${tool}`, ...input })) }
+  // An older window runs the build it loaded until it reloads.
+  expect(await call('hub_recall', { query: 'routing' })).toContain('from 8')
+  expect(asked).toEqual(['8/hub/recall'])
+  down = 8
+  expect(await call('hub_recall', { query: 'routing' })).toContain('from 7')
+  expect(asked).toEqual(['8/hub/recall', '7/hub/recall'])
+  newest = '/u/Armasu'
+  expect(await call('hub_recall', { query: 'routing' })).toContain('from 7')
+  expect(asked).toEqual(['8/hub/recall', '7/hub/recall'])
+  newest = '/u/Other'
+  // The brain is this project's only.
+  down = undefined
+  expect(await call('hub_ask', { question: 'who is on what?' })).toContain('from 7')
+  expect(asked).toEqual(['7/hub/ask'])
+})
+
+test('hub_recall outlasts a slow window, falls back to any window, and says when none answered', async ($, on) => {
+  const asked: string[] = []
+  const slept: string[][] = []
+  let cwd = '/u/Armasu'
+  let reply: () => Promise<{ value: object }> = () => new Promise(r => setTimeout(() => r({ value: { status: 200, ok: true, headers: {}, text: 'late answer' } }), 30))
+  let sleep: () => Promise<{ value: object }> = () => new Promise(() => {})
+  on('env.get', () => ({ value: '/u' }))
+  on('clock.now', () => ({ value: 9.4e12 }))
+  // The two second cutoff of every other call: it must not end a recall or an ask.
+  on('clock.sleep', () => ({ value: undefined }))
+  on('process.run', (_, e) => { slept.push(e.argv as string[]); return sleep() as never })
+  on('session.cwd', () => ({ value: cwd }))
+  on('session.id', () => ({ value: 'chat-recall-slow' }))
+  on('fs.list', () => ({ value: [{ name: 'a-1.json', kind: 'file', size: 10, mtimeMs: 0, isLink: false }] }))
+  on('fs.read', (_, e) => ({ value: String(e.path).endsWith('a-1.json') ? JSON.stringify({ port: 7, workspace: '/u/Armasu', hubToken: 't' }) : '' }))
+  on('http.fetch', (_, e) => { asked.push(String(e.url)); return reply() as never })
+  on('tool.call', () => ({ result: {} }))
+  const call = async (tool: string, input: object) => JSON.stringify(await $.tool.call({ tool: `mcp__usage-meter__${tool}`, ...input }))
+  expect(await call('hub_recall', { query: 'routing' })).toContain('late answer')
+  expect(slept[0]).toEqual(['sleep', '10'])
+  expect(await call('hub_ask', { question: 'who is on what?' })).toContain('late answer')
+  expect(slept[1]).toEqual(['sleep', '65'])
+  // Memory is the whole Mac's, so any window can answer; the brain is this project's only.
+  cwd = '/elsewhere'
+  asked.length = 0
+  expect(await call('hub_recall', { query: 'routing' })).toContain('late answer')
+  expect(asked.some(u => u.includes('/hub/recall') && u.includes('cwd=%2Felsewhere'))).toBe(true)
+  expect(await call('hub_ask', { question: 'who is on what?' })).toContain('No Switchboard window holds this folder')
+  cwd = '/u/Armasu'
+  reply = () => new Promise(() => {})
+  sleep = async () => ({ value: { exitCode: 0, stdout: '', stderr: '' } })
+  expect(await call('hub_recall', { query: 'routing' })).toContain('did not answer in time')
+  expect(await call('hub_ask', { question: 'who is on what?' })).toContain('did not answer in time')
 })

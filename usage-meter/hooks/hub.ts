@@ -33,8 +33,9 @@ export async function discover($: EngineInterface) {
   const home = (await $.env.get('HOME')) ?? (await $.env.get('USERPROFILE')) ?? ''
   const dir = `${norm(home)}/.claude/switchboard`
   const files: Discovery[] = []
-  for (const e of await $.fs.list(dir).catch(() => [])) {
-    if (e.kind !== 'file' || !e.name.endsWith('.json') || e.name === 'workspaces.json') continue
+  // Newest file first: a window writes its own when it starts.
+  for (const e of [...await $.fs.list(dir).catch(() => [])].sort((a, b) => b.mtimeMs - a.mtimeMs)) {
+    if (e.kind !== 'file' || !/^[0-9a-f]+-\d+\.json$/i.test(e.name)) continue
     try { files.push(JSON.parse(String(await $.fs.read(`${dir}/${e.name}`)))) } catch { /* a file mid-write */ }
   }
   feed.targets = targetsOf(files)
@@ -46,6 +47,13 @@ export function fetchSoon($: EngineInterface, url: string, init?: Parameters<Eng
   return Promise.race([
     $.http.fetch(url, init),
     Promise.resolve().then(() => $.clock.sleep(FETCH_MS)).then(() => undefined, () => new Promise<never>(() => {})),
+  ]).catch(() => undefined)
+}
+// fetchSoon for a call the chat waits on: a sleep process, since clock.sleep would spend the handler's 10 s budget.
+export function fetchWithin($: EngineInterface, seconds: number, url: string, init?: Parameters<EngineInterface['http']['fetch']>[1]) {
+  return Promise.race([
+    $.http.fetch(url, init),
+    Promise.resolve().then(() => $.process.run(['sleep', String(seconds)], { timeoutMs: (seconds + 5) * 1000 })).then(() => undefined, () => new Promise<never>(() => {})),
   ]).catch(() => undefined)
 }
 // The window token goes in a header, out of the URL.

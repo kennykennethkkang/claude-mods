@@ -10,7 +10,7 @@ Runs the safe repairs on the memory graph by script, then you handle what needs 
 ## Steps
 
 1. Save a recall baseline: `node ~/.claude/skills/aar/scripts/memory-gold.mjs --save "$TMPDIR/gold-before.json"`. Then `node ~/.claude/skills/memory-fix/scripts/memory-fix.mjs --dry` and read the plan. Drop `--dry` to apply. It reads health from the running hub (exit 2 otherwise), or from `--graph <file.json>`. Backups go to `~/.cache/memory-fix/<time>/`.
-2. What it applies: `MEMORY.md` drift (drops lines for missing files, appends `- [name](file.md): description` for unlisted notes); a live note that a live note supersedes moves unedited to `archive/` (not when in a loop); a dangling link retargeted when exactly one note matches by slug, or by edit distance 1 for names of 6 or more characters. It never writes through a symlink or outside the memory and wiki folders.
+2. What it applies: `MEMORY.md` drift (drops lines for missing files, appends `- [](file.md) description` for unlisted notes, keeps `status: unproven` notes out); a live note that a live note supersedes moves unedited to `archive/` (not when in a loop); a dangling link retargeted when exactly one note matches by slug, or by edit distance 1 for names of 6 or more characters. It never writes through a symlink or outside the memory and wiki folders.
 3. Each line it prints under "needs judgment" has a path. Handle by kind:
    - dangling: find the note the link meant (`hub_recall`, grep the folder), retarget; only if none exists, remove the link. Never leave a link to a note that does not exist.
    - orphan: add a typed relation or `[[link]]` to a genuinely related note. If nothing is related, leave it and report it.
@@ -18,13 +18,15 @@ Runs the safe repairs on the memory graph by script, then you handle what needs 
    - contradictions: resolve with `supersedes` only when both notes cover the same subject and one has newer evidence. Otherwise leave and list it for Kenneth.
    - invalid: draft the missing description from the note body, set `metadata.type` to user, feedback, project or reference. Do not make up content.
    - stale (project notes over 90 days): check against code and git. Still true: touch nothing, or update it. Replaced: write the new note with `supersedes`. Unverifiable: report only.
+   - unproven (a guess over 14 days old): reproduce it, or check it in code, git or the note's chat. Proven: drop `status: unproven` and add its index line. Wrong or unprovable: move it to `memory/archive/`.
+   - outdated (from memory-health: a note naming a file that moved or went): put the new path in; when the file is gone for good, correct the fact against the code or supersede the note.
    - loops: keep the newest note, delete the other `supersedes` lines.
 4. Rules for relations: `supersedes` when a fact changes (new note, old one moves unedited to `memory/archive/`, drop its index line); `depends-on`, `part-of`, `related` for the rest; `contradicts` only while unresolved. Link only to notes or wiki pages that exist; tools and skills go in backticks. Wiki pages: update `index.md` and append a dated line to `log.md`.
 5. Finish: rerun the script, then `node ~/.claude/skills/aar/scripts/memory-health.mjs`, then `node ~/.claude/skills/aar/scripts/memory-gold.mjs --base "$TMPDIR/gold-before.json"`. Exit 1 means a recall hit was lost: restore from the `~/.cache/memory-fix` backup or fix the link. Report what is left.
 
 ## Before writing a note
 
-Reconcile first (the Mem0 pattern): `hub_recall` the topic, then pick one. Add when nothing covers it. Supersede when a note covers the same subject and the fact changed. Skip when a note already says it; update its `modified` line only if the content changed.
+Reconcile first (the Mem0 pattern): `hub_recall` the topic, then pick one. Add when nothing covers it. Supersede when a note covers the same subject and the fact changed. Skip when a note already says it; update its `modified` line only if the content changed. A guess takes `status: unproven` and no index line.
 
 ## Consolidation proposals (Learn run)
 

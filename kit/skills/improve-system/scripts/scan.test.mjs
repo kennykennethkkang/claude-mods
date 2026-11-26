@@ -66,9 +66,9 @@ test('leaves harmless pairs alone', () => {
 })
 
 test('leaves file paths and project folder names alone', () => {
-  const p = '/private/tmp/claude-501/-Users-kennykennethkkang-Documents-GitHub-switchboard/06aa1ab0-ff25-4192-bfbc-4aee8687ca10/scratchpad/scan.mjs'
+  const p = '/private/tmp/claude-501/-Users-generic-user-Documents-GitHub-switchboard/06aa1ab0-ff25-4192-bfbc-4aee8687ca10/scratchpad/scan.mjs'
   assert.equal(redact(p), p)
-  assert.equal(redact('see -Users-kennykennethkkang-Documents-GitHub-switchboard-extension now'), 'see -Users-kennykennethkkang-Documents-GitHub-switchboard-extension now')
+  assert.equal(redact('see -Users-generic-user-Documents-GitHub-switchboard-extension now'), 'see -Users-generic-user-Documents-GitHub-switchboard-extension now')
   assert.equal(redact('edit src/components/switchboard/VeryLongComponentNameForTesting1234.tsx'), 'edit src/components/switchboard/VeryLongComponentNameForTesting1234.tsx')
 })
 

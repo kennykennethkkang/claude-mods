@@ -1,7 +1,7 @@
 {
   "name": "ecc-agents",
-  "version": "0.1.1",
-  "description": "The 71 subagents from ECC (github.com/affaan-m/ECC, commit d2ef268) by Affaan Mustafa, MIT, dashes normalized",
+  "version": "0.1.2",
+  "description": "The 71 subagents from ECC (github.com/affaan-m/ECC, commit d2ef268) by Affaan Mustafa, MIT, dashes normalized, descriptions shortened",
   "author": {
     "name": "Affaan Mustafa",
     "url": "https://github.com/affaan-m/ECC"

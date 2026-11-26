@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { guardTarget, guardCandidate, diffLines, decide, loadTasks, parsePass } from './self-improve.mjs'
+import { guardTarget, guardCandidate, diffLines, decide, loadTasks, parsePass, MIN_APPROVED, runsFor, merge } from './self-improve.mjs'
 
 const K = '/Users/x/claude-mods/kit'
 
@@ -32,20 +32,54 @@ test('diffLines counts changed lines', () => {
 })
 
 const s = (...tasks) => Object.fromEntries(tasks.map((p, i) => [`t${i}`, { pass: p, turns: 4, cost: 0.2 }]))
+// small samples: these tests check margin and regression, not the 30 result floor
+const d = (b, c) => decide(b, c, 0.1, 0)
 
 test('decide needs margin and no regression', () => {
-  assert.equal(decide(s([1, 0, 0, 1]), s([1, 1, 0, 1])).accept, true)
-  assert.equal(decide(s([1, 0, 0, 1]), s([1, 0, 0, 1])).accept, false)
-  const r = decide(s([1, 0, 1, 1], [0, 0]), s([0, 1, 1, 1], [1, 1]))
+  assert.equal(d(s([1, 0, 0, 1]), s([1, 1, 0, 1])).accept, true)
+  assert.equal(d(s([1, 0, 0, 1]), s([1, 0, 0, 1])).accept, false)
+  const r = d(s([1, 0, 1, 1], [0, 0]), s([0, 1, 1, 1], [1, 1]))
   assert.equal(r.accept, false)
   assert.match(r.why, /regressed on t0/)
-  assert.equal(decide(s([1, 0], [0, 0]), { t0: { pass: [1, 1] } }).accept, false)
+  assert.equal(d(s([1, 0], [0, 0]), { t0: { pass: [1, 1] } }).accept, false)
 })
 
 test('decide tie breaks on cost and turns', () => {
   const base = s([1, 0]), cheap = { t0: { pass: [1, 0], turns: 3, cost: 0.1 } }
-  assert.equal(decide(base, cheap).accept, true)
-  assert.equal(decide(base, { t0: { pass: [1, 0], turns: 9, cost: 0.1 } }).accept, false)
+  assert.equal(d(base, cheap).accept, true)
+  assert.equal(d(base, { t0: { pass: [1, 0], turns: 9, cost: 0.1 } }).accept, false)
+})
+
+test('decide needs 30 approved results by default', () => {
+  const r = (n, k) => ({ t0: { pass: [...Array(n).fill(1), ...Array(k).fill(0)], items: 4 } })
+  assert.equal(MIN_APPROVED, 30)
+  assert.match(decide(r(20, 12), r(29, 3)).why, /29 approved results, need 30/)
+  assert.equal(decide(r(20, 12), r(30, 2)).accept, true)
+})
+
+test('repeated runs compare passes per item, not per slot', () => {
+  // item 1 passed once on each side, in different runs
+  assert.deepEqual(d({ t0: { pass: [1, 0, 0, 1], items: 2 } }, { t0: { pass: [1, 1, 1, 0], items: 2 } }).regressed, [])
+  assert.deepEqual(d({ t0: { pass: [1, 1, 1, 1], items: 2 } }, { t0: { pass: [1, 1, 0, 1], items: 2 } }).regressed, ['t0'])
+})
+
+test('runsFor judges enough items that 80% passing reaches 30', () => {
+  assert.equal(runsFor(10), 4)
+  assert.equal(runsFor(13), 3)
+  assert.equal(runsFor(30), 2)
+  assert.equal(runsFor(38), 1)
+  assert.equal(runsFor(7), 6)
+  for (const n of [7, 8, 9, 10, 11, 13, 24]) assert.ok(runsFor(n) * n * 0.8 >= 30, n)
+})
+
+test('merge joins a task side across runs in run order', () => {
+  const m = merge([
+    { id: 'a', side: 'candidate', run: 1, pass: [false, true], turns: 2, cost: 0.1, result: 'r1' },
+    { id: 'a', side: 'candidate', run: 0, pass: [true, true], turns: 3, cost: 0.2, result: 'r0' },
+    { id: 'a', side: 'baseline', run: 0, pass: [true, false], turns: 1, cost: 0.1, result: 'b0' },
+  ])
+  assert.deepEqual(m.find(x => x.side === 'candidate'), { id: 'a', side: 'candidate', items: 2, pass: [true, true, false, true], turns: 5, cost: 0.30000000000000004, results: ['r0', 'r1'] })
+  assert.equal(m.length, 2)
 })
 
 test('seed evals have a dev and held-out split with checklists', () => {

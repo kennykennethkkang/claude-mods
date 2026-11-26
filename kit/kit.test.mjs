@@ -2,10 +2,10 @@
 // settings merge, and which files never leave this machine.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { CODEX_MAP, codexAgent, CODEX_AGENT_HEADER, procs, DENY, exportManifest, exportSkills, keyLine, newestVsix, isSecretFile, launchAgent, rcLogin, rcPath, rcSpawn, startupVbs, mergeSettings, oldRcPids, planSetup, RC_NAME, rcArgs, rcExitNote, rcPattern, pathRules, PATH_RULE_MARK, rulesAction, rulesTargets, staleRc, withPathRules, withDeny, withTrust } from './kit.mjs'
+import { CODEX_MAP, codexAgent, CODEX_AGENT_HEADER, procs, DENY, exportManifest, exportSkills, keyLine, newestVsix, isSecretFile, idleRc, launchAgent, rcLogin, rcPath, rcSpawn, startupVbs, mergeSettings, oldRcPids, planSetup, RC_NAME, rcArgs, rcExitNote, rcPattern, pathRules, PATH_RULE_MARK, rulesAction, rulesTargets, staleRc, withPathRules, withDeny, withTrust, releaseChecksumMatches } from './kit.mjs'
 
 const settings = {
-  model: 'opus', theme: 'dark', autoCompactWindow: 200000, remoteControlAtStartup: true,
+  model: 'opus', theme: 'dark', autoCompactWindow: 200000, skillListingMaxDescChars: 300, remoteControlAtStartup: true,
   env: { OPENROUTER_API_KEY: 'sk-or-v1-xxxxxxxxxxxxxxxxxxxx' }, permissions: { allow: ['Bash(ls:*)'] }, hooks: { Stop: [] },
   enabledPlugins: { 'superpowers@superpowers-dev': true, 'auth0@claude-plugins-official': false, 'usage-meter@kenneth-mods': true },
 }
@@ -17,7 +17,7 @@ const known = {
 }
 
 test('an export carries plugins, marketplaces, skills and only the safe settings', () => {
-  const m = exportManifest({ settings, known, skills: ['phone', 'synced'], archived: ['drei'], presets: ['armasu-copy-check.json'], now: 0 })
+  const m = exportManifest({ settings, known, skills: ['phone', 'synced'], archived: ['drei'], presets: ['app-copy-check.json'], now: 0 })
   assert.deepEqual(m.plugins, settings.enabledPlugins)
   assert.deepEqual(m.marketplaces['kenneth-mods'], { source: 'kit' })
   assert.deepEqual(m.marketplaces['superpowers-dev'], { source: 'git', url: 'https://github.com/obra/superpowers.git' })
@@ -29,7 +29,17 @@ test('an export carries plugins, marketplaces, skills and only the safe settings
   assert.equal(m.settings.permissions, undefined)
   assert.equal(m.settings.hooks, undefined)
   assert.equal(m.settings.autoCompactWindow, 200000)
+  assert.equal(m.settings.skillListingMaxDescChars, 300)
   assert.deepEqual(m.settings.statusLine, { type: 'command', command: 'node <KIT>/statusline.mjs' })
+})
+
+test('an export drops machine paths and per-project settings and presets', () => {
+  const local = { ...known, 'local-one': { source: { source: 'directory', path: 'C:\\Users\\k\\mods' } } }
+  const m = exportManifest({ settings: { ...settings, autoMode: { environment: ['private repo'] } }, known: local, skills: [], archived: [], presets: ['project.json'], now: 0 })
+  assert.equal(m.marketplaces['local-one'], undefined)
+  assert.equal(JSON.stringify(m).includes('C:\\Users\\k\\mods'), false)
+  assert.equal(m.settings.autoMode, undefined)
+  assert.deepEqual(m.jevPresets, [])
 })
 
 test('a setup adds marketplaces, installs plugins, turns off the ones that were off, then the rest', () => {
@@ -115,6 +125,42 @@ test('per-repo servers from before the single one are picked out to stop, Mac is
   assert.deepEqual(oldRcPids(''), [])
 })
 
+test('old Windows Claude shims and absolute paths are matched', () => {
+  assert.deepEqual(oldRcPids('12 C:\\Users\\k\\AppData\\Roaming\\npm\\claude.cmd remote-control --name Old\n13 "C:\\Tools\\claude.exe" remote-control --name Mac'), [12])
+  assert.deepEqual(oldRcPids('14 "C:\\Program Files\\nodejs\\node.exe" "C:\\Users\\k\\AppData\\Roaming\\npm\\node_modules\\@anthropic-ai\\claude-code\\cli.js" remote-control --name Old\n15 C:\\Windows\\system32\\cmd.exe /d /s /c "claude.cmd remote-control --name Old2"\n16 C:\\bin\\other.exe remote-control --name X'), [14, 15])
+})
+
+test('idleRc ends only phone sessions of the server that sat idle for hours', () => {
+  const now = 1_800_000_000_000, h = 3_600_000
+  const rows = [
+    { pid: 10, ppid: 1, args: 'claude remote-control --name Mac --spawn same-dir' },
+    { pid: 20, ppid: 10, args: '/v/2.1.330 --print --sdk-url https://x/cse_a' },
+    { pid: 25, ppid: 10, args: '/v/2.1.330 --print --sdk-url https://x/cse_new' },
+    { pid: 21, ppid: 10, args: '/v/2.1.330 --print --sdk-url https://x/cse_b' },
+    { pid: 22, ppid: 10, args: '/v/2.1.330 --print --sdk-url https://x/cse_c' },
+    { pid: 23, ppid: 10, args: '/v/2.1.330 --print --sdk-url https://x/cse_d' },
+    { pid: 24, ppid: 10, args: '/v/2.1.330 --print --sdk-url https://x/cse_e' },
+    { pid: 30, ppid: 99, args: 'claude --print --sdk-url https://x/other-server' },
+    { pid: 31, ppid: 10, args: 'node helper.mjs' },
+    { pid: 40, ppid: 20, args: 'npm exec @playwright/mcp@latest' },
+    { pid: 41, ppid: 23, args: '/bin/zsh -c source /Users/k/.claude/shell-snapshots/snapshot-zsh-1.sh && npm run dev' },
+  ]
+  const old = (pid, id = 'abcde'[pid - 20] ?? 'z') => ({ pid, bridgeSessionId: `session_${id}`, status: 'idle', statusUpdatedAt: now - 7 * h })
+  const sessions = [old(20), { ...old(21), statusUpdatedAt: now - 5 * h }, { ...old(22), status: 'busy' }, old(23), { pid: 24, bridgeSessionId: 'session_e', status: 'idle' }, old(25, 'gone'), old(30), old(31)]
+  assert.deepEqual(idleRc([10], rows, sessions, now), [20])
+  assert.deepEqual(idleRc([], rows, sessions, now), [])
+  assert.deepEqual(idleRc([10], rows, [], now), [])
+  assert.deepEqual(idleRc([10], rows, [{ ...old(20), bridgeSessionId: undefined }], now), [])
+})
+
+test('the idle sweep runs hourly and not at login', () => {
+  const xml = launchAgent('/usr/local/bin/node', '/k/rc-servers.mjs', { label: 'com.kenneth.switchboard.rc-idle', args: ['--idle'], every: 3600 })
+  assert.match(xml, /<string>com\.kenneth\.switchboard\.rc-idle<\/string>/)
+  assert.match(xml, /rc-servers\.mjs<\/string><string>--idle<\/string>/)
+  assert.match(xml, /<key>StartInterval<\/key><integer>3600<\/integer>/)
+  assert.doesNotMatch(xml, /RunAtLoad/)
+})
+
 test('the running-server check matches the name literally and whole', () => {
   const re = new RegExp(rcPattern('a.b'))
   assert.ok(re.test('claude remote-control --name a.b --spawn worktree'))
@@ -178,6 +224,11 @@ test('the newest vsix is picked by version, not by name', () => {
   assert.equal(newestVsix(['switchboard-0.17.9-beta.vsix', 'switchboard-0.1.0.vsix']), 'switchboard-0.1.0.vsix')
 })
 
+test('release checksum verifies the VSIX bytes', () => {
+  assert.equal(releaseChecksumMatches(Buffer.from('vsix'), '7c1debe0f4af81f958662322cbc7f11c8b66cf1521de2ff307cd00526f0eddda  switchboard.vsix'), true)
+  assert.equal(releaseChecksumMatches(Buffer.from('vsix'), '0'.repeat(64)), false)
+})
+
 test('rcPath joins with the OS delimiter and adds where claude lives there', () => {
   assert.equal(rcPath('darwin', { home: '/h', execDir: '/n/bin', PATH: '/usr/bin' }), '/h/.local/bin:/n/bin:/usr/bin')
   assert.equal(rcPath('win32', { home: 'C:\\Users\\k', execDir: 'C:\\Program Files\\nodejs', PATH: 'C:\\Windows', appData: 'C:\\Users\\k\\AppData\\Roaming' }),
@@ -236,8 +287,9 @@ test('only the Codex copy gets the tool map, and a newer copy is kept', () => {
   const v = '2026-10-28T10:00:00Z'
   const [claude, codex] = rulesTargets('/h', '# Rules\n', v)
   assert.ok(codex.text.endsWith(CODEX_MAP) && codex.text.includes('mcp__switchboard__ask'))
-  assert.match(CODEX_MAP, /Phone push[^\n]*skip/)
   assert.match(CODEX_MAP, /request_user_input[^\n]*fallback only[^\n]*title and options/)
+  assert.match(CODEX_MAP, /ListAgents[^\n]*claude agents --json[^\n]*chats_check/)
+  assert.match(CODEX_MAP, /SendMessage[^\n]*ask the user[^\n]*mcp__switchboard__ask/)
   assert.ok(!claude.text.includes('Codex tool map'))
   const newer = rulesTargets('/h', '# Rules\n', '2026-11-01T00:00:00Z')[1]
   assert.equal(rulesAction(newer.text, '# Rules\n', v, newer.tail), 'skip')
@@ -263,4 +315,35 @@ test('redact.ts and scan.mjs hold the same secret patterns', async () => {
   const mine = block('../usage-meter/hooks/redact.ts')
   assert.ok(mine.length > 20)
   assert.deepEqual(block('./skills/improve-system/scripts/scan.mjs'), mine)
+})
+
+// PATH is empty and HOME is a scratch folder, so a guard that fails cannot touch this machine.
+test('setup.mjs: an unknown flag lists the flags and installs nothing', async () => {
+  const { spawnSync } = await import('node:child_process')
+  const { mkdtempSync, readdirSync, rmSync } = await import('node:fs')
+  const { tmpdir } = await import('node:os')
+  const { join } = await import('node:path')
+  const { fileURLToPath } = await import('node:url')
+  const home = mkdtempSync(join(tmpdir(), 'kit-flags-'))
+  const setup = fileURLToPath(new URL('./setup.mjs', import.meta.url))
+  const run = (...a) => spawnSync(process.execPath, [setup, ...a], { encoding: 'utf8', env: { HOME: home, USERPROFILE: home, PATH: '' } })
+  try {
+    for (const a of [['--bogus'], ['--rules-only', '--bogus'], ['rules-only']]) {
+      const r = run(...a)
+      assert.equal(r.status, 1, a.join(' '))
+      assert.match(r.stdout, /--rules-only .*\n[\s\S]*--rc-only/)
+      assert.match(r.stderr, /^Unknown flag: (--bogus|rules-only)$/m)
+    }
+    // --export and --rc-only stay out: a broken guard would write the kit or start servers.
+    for (const a of [['--rules-only', '--dry-run'], ['--dry-run', '--permissions-only']]) {
+      const r = run(...a)
+      assert.equal(r.status, 1, a.join(' '))
+      assert.match(r.stderr, /^--dry-run works only alone$/m)
+    }
+    const help = run('--help')
+    assert.equal(help.status, 0)
+    assert.match(help.stdout, /--dry-run/)
+    assert.equal(run('--dry-run').status, 0)
+    assert.deepEqual(readdirSync(home), [])
+  } finally { rmSync(home, { recursive: true, force: true }) }
 })

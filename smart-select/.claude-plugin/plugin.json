@@ -1,0 +1,9 @@
+{
+  "name": "smart-select",
+  "version": "0.1.4",
+  "description": "Smart picks for terminal selections: a ponytail level per task and a pick with a reason for every question, logged so Switchboard can learn which picks held up",
+  "author": {
+    "name": "Kenneth Kang"
+  },
+  "license": "MIT"
+}

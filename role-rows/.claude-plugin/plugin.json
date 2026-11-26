@@ -1,0 +1,9 @@
+{
+  "name": "role-rows",
+  "version": "0.3.2",
+  "description": "Readable role rows: the subagents under the prompt as a tree grouped by role (or one aligned colored line each), a compact header on Agent calls, optionally only Status and Open from a role's report and a roster line above the prompt",
+  "author": {
+    "name": "Kenneth Kang"
+  },
+  "license": "MIT"
+}

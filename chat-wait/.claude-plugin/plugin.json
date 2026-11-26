@@ -1,6 +1,6 @@
 {
   "name": "chat-wait",
-  "version": "0.2.2",
+  "version": "0.2.8",
   "description": "Lets a chat see this project's other live chats and wait for one to finish, and stops an edit to a file another live chat is editing",
   "author": {
     "name": "Kenneth Kang"

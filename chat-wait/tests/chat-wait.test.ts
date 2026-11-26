@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 import type { EngineInterface } from 'claude-code'
 
-import { checkText, editClash, editDenial, matchTargets, MAX_BLOCKS, outcomeOf, peersOf, resetCache, stopReason, waitStep, waitsOn } from '../hooks/register.ts'
+import { waitBand, checkText, editClash, editDenial, matchTargets, MAX_BLOCKS, outcomeOf, peersOf, resetCache, stopReason, waitStep, waitsOn } from '../hooks/register.tsx'
 
 const ME = 'me-0000-1111'
 const state = (over: Record<string, unknown> = {}) => ({
@@ -82,7 +82,7 @@ function fakeEngine(hub: { states: unknown[]; posts: Record<string, unknown>[]; 
           // The hub does not know link yet.
           return { status: 400, ok: false, text: '' }
         }
-        expect(url).toBe('http://127.0.0.1:9/hub/state')
+        expect(url).toBe('http://127.0.0.1:9/hub/state?fields=chats,progress,live,links,archive,todos,unlinks,pause,waits')
         expect(init?.headers?.['X-Switchboard-Token']).toBe('tok')
         const s = hub.states.length > 1 ? hub.states.shift() : hub.states[0]
         return { status: 200, ok: true, text: JSON.stringify(s) }
@@ -365,4 +365,53 @@ test('stop blocks at most MAX_BLOCKS times in a row', async () => {
   for (let i = 1; i < MAX_BLOCKS; i++) expect(await stopReason($, true)).toMatch(/^You are waiting on/)
   expect(await stopReason($, true)).toBeUndefined()
   expect(await stopReason($, false)).toMatch(/^You are waiting on/)
+})
+
+test('band: names who this chat waits on, adds the to-do note, ends with the wait', () => {
+  const s = (links: unknown[], more: Record<string, unknown> = {}) => state({ links, ...more }) as never
+  const own = [{ from: ME, to: ['aaaa-1111'] }]
+  expect(waitBand(s(own), ME, false, 1, 200)).toBe('Waiting on hub engineer to finish')
+  expect(waitBand(s(own), ME, true, 1, 200)).toBe('Waiting on hub engineer to finish, then this to-do runs')
+  // Left lines: sent when the chat finishes, sent already once it has.
+  const left = (st: string, n: number) => [{ sessionId: ME, cwd: '/r/app', state: st, tasks: [], report: { done: [], left: Array.from({ length: n }, (_, i) => `Left ${i}`) } }]
+  expect(waitBand(s([], { progress: left('working', 2) }), ME, false, 1, 200)).toBe('Sends 2 lines to To-do when it finishes')
+  expect(waitBand(s([], { progress: left('working', 1) }), ME, false, 1, 200)).toBe('Sends 1 line to To-do when it finishes')
+  expect(waitBand(s([], { progress: left('done', 2) }), ME, false, 1, 200)).toBe('Sent 2 lines to To-do')
+  expect(waitBand(s(own, { progress: left('working', 1) }), ME, false, 1, 200)).toBe('Waiting on hub engineer to finish · Sends 1 line to To-do when it finishes')
+  // Target already done: no band. Others' links: none.
+  expect(waitBand(s([{ from: ME, to: ['bbbb-2222'] }]), ME, true, 1, 200)).toBeUndefined()
+  expect(waitBand(s([{ from: 'aaaa-1111', to: [ME] }]), ME, true, 1, 200)).toBeUndefined()
+  expect(waitBand(s([]), ME, true, 1, 200)).toBeUndefined()
+  // An edit-guard link shows the file.
+  expect(waitBand(s([{ from: ME, to: ['aaaa-1111'], auto: true }]), ME, false, 1, 200)).toBe('Waiting on hub.ts in hub engineer to finish')
+  expect(waitBand(s(own), ME, true, 1, 20)).toBe('Waiting on hub engi…')
+})
+
+test('band: a to-do chat shows the project hold text when the hub sends one, else the wait line', () => {
+  const links = [{ from: ME, to: ['aaaa-1111'] }]
+  // The hub keys todos by folder path, as Switchboard sends it.
+  const held = state({ links, todos: { '/r/app': { plan: { hold: { kind: 'waiting', text: 'Next to-do waits for hub engineer' } } } } }) as never
+  expect(waitBand(held, ME, true, 1, 200, 'app')).toBe('Next to-do waits for hub engineer')
+  expect(waitBand(held, ME, false, 1, 200, 'app')).toBe('Waiting on hub engineer to finish')
+  expect(waitBand(state({ links, todos: { '/r/app': {} } }) as never, ME, true, 1, 200, 'app')).toBe('Waiting on hub engineer to finish, then this to-do runs')
+  // Nothing waited on: no band, even with a hold; a 'running' hold is not this chat's wait.
+  expect(waitBand(state({ links: [], todos: { '/r/app': { plan: { hold: { kind: 'waiting', text: 'x' } } } } }) as never, ME, true, 1, 200, 'app')).toBeUndefined()
+  const running = state({ links, todos: { '/r/app': { plan: { hold: { kind: 'running', text: 'Next to-do starts when x finishes' } } } } }) as never
+  expect(waitBand(running, ME, true, 1, 200, 'app')).toBe('Waiting on hub engineer to finish, then this to-do runs')
+  // Another project's hold never shows here.
+  const other = state({ links, todos: { '/r/blog': { plan: { hold: { kind: 'running', text: 'Next to-do starts when x finishes' } } } } }) as never
+  expect(waitBand(other, ME, true, 1, 200, 'app')).toBe('Waiting on hub engineer to finish, then this to-do runs')
+})
+
+test('band matches Windows project paths and displays normalised file names', () => {
+  const s = state({
+    chats: [
+      { sessionId: ME, name: 'lead', cwd: 'C:\\Users\\k\\repo', project: 'repo', live: true },
+      { sessionId: 'aaaa-1111', name: 'hub engineer', cwd: 'C:\\Users\\k\\repo\\ext', project: 'repo', live: true },
+    ],
+    links: [{ from: ME, to: ['aaaa-1111'], auto: true }],
+    live: [{ sessionId: 'aaaa-1111', cwd: 'C:\\Users\\k\\repo', file: 'C:\\Users\\k\\repo\\src\\hub.ts', fileAt: 1 }],
+    todos: { 'C:\\Users\\k\\repo': {} },
+  }) as never
+  expect(waitBand(s, ME, true, 1, 200, 'repo')).toBe('Waiting on hub.ts in hub engineer to finish, then this to-do runs')
 })

@@ -4,7 +4,7 @@
 // Setup installs this file beside type-stripped .mjs copies of those mods (~/.codex/switchboard-guard),
 // so it runs on plain Node and outlives a moved repo. From the repo it loads the .ts files (Node 22.6+).
 import { execFileSync, spawnSync } from 'node:child_process'
-import { appendFileSync, existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, statSync, writeFileSync } from 'node:fs'
 import * as nodeModule from 'node:module'
 import { homedir } from 'node:os'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
@@ -55,6 +55,8 @@ export const fallbackDeny = command => FALLBACK.find(([re]) => re.test(command))
 export let loadError
 let hardDeny = command => fallbackDeny(command)
 let bashRule = () => undefined, addsEmDash = () => false, rootsFor = () => [], isUnder = () => false
+let parseClaims, heldBy, heldDeny, stamp, release, claimFile
+let inWorkbench, needsLog, adjustDir, recentIds, logged, logDeny
 let decide, clisOf, targetOf, denial
 let spendOf, ruleOf, ESTIMATE, FLOOR, CHECKS, thisMonth, openBrowsers, tabReason, waiting
 let lastTurn, judge, noteTask, MAX_BLOCKS = 0
@@ -66,7 +68,7 @@ const load = async (name, take) => {
   }
 }
 await load('bash-approve', m => ({ hardDeny } = m))
-await load('repo-rules', m => ({ bashRule, addsEmDash, rootsFor, isUnder } = m))
+await load('repo-rules', m => ({ bashRule, addsEmDash, rootsFor, isUnder, parseClaims, heldBy, heldDeny, stamp, release, claimFile, inWorkbench, needsLog, adjustDir, recentIds, logged, logDeny } = m))
 await load('done-check', m => ({ lastTurn, judge, noteTask, MAX_BLOCKS } = m))
 await load('account-guard', m => ({ decide, clisOf, targetOf } = m))
 await load('phone-mode', m => ({ denial } = m))
@@ -165,9 +167,76 @@ function preToolUseRaw(p, home) {
       const path = isAbsolute(file) ? file : resolve(p.cwd ?? '', file)
       if (isUnder(path, roots) && addsEmDash('', added.join('\n'))) return 'repo-rules: an em dash in the new text. Use a comma, a colon, or "to".'
     }
+    const files = absPatchFiles(text, p.cwd)
+    return logGuard(files, p.cwd ?? '', home) ?? claimGuard(files, p.session_id, home)
   }
   return undefined
 }
+
+/** repo-rules' Workbench rule for Codex: a patch outside the folder needs an open change naming the file. */
+function logGuard(files, cwd, home) {
+  if (!logged || !inWorkbench(cwd, home)) return undefined
+  const dir = adjustDir(home)
+  let ids = []
+  try { ids = recentIds(readdirSync(dir)) } catch { /* no changes logged yet */ }
+  const open = path => ids.some(id => { try { return logged(readFileSync(join(dir, id, 'record.json'), 'utf8'), path) } catch { return false } })
+  const path = files.map(f => resolve(f)).find(f => needsLog(f, home) && !open(f))
+  return path && logDeny(path)
+}
+
+// repo-rules' file claims for Codex: the same claims files and 20 minute hold as Claude chats.
+const repoRootOf = path => {
+  for (let d = dirname(path); d !== dirname(d); d = dirname(d)) if (existsSync(join(d, '.git'))) return d
+  return undefined
+}
+
+/**
+ * Checks each file against the claims. mode 'check' stamps free files for this session and returns a refusal for a held one;
+ * mode 'stamp' (PostToolUse, where code mode hides the edit from PreToolUse) only records. Fails open.
+ */
+export function claimGuard(files, session, home, { mode = 'check', now = Date.now() } = {}) {
+  if (!stamp || !session) return undefined
+  try {
+    for (const path of files) {
+      const root = repoRootOf(path)
+      if (!root) continue
+      const file = claimFile(home, root)
+      const claims = parseClaims(existsSync(file) ? readFileSync(file, 'utf8') : '{}')
+      const key = path.replace(/\\/g, '/')
+      const other = mode === 'check' ? heldBy(claims, key, session, now) : undefined
+      if (other) {
+        return heldDeny(key.split('/').pop(), other, now)
+      }
+      mkdirSync(dirname(file), { recursive: true })
+      const tmp = `${file}.${session.replace(/[^A-Za-z0-9-]/g, '')}-${now}.tmp`
+      writeFileSync(tmp, JSON.stringify(stamp(claims, key, session, now)))
+      renameSync(tmp, file)
+    }
+  } catch { /* fail open */ }
+  return undefined
+}
+
+/** Drops every claim this session holds, as repo-rules does when a Claude chat ends. Fails open. */
+function releaseClaims(session, home) {
+  if (!release || !session) return
+  const dir = dirname(claimFile(home, ''))
+  let names = []
+  try { names = readdirSync(dir).filter(f => f.endsWith('.json')) } catch { /* no claims yet */ }
+  for (const f of names) {
+    try {
+      const file = join(dir, f)
+      const claims = parseClaims(readFileSync(file, 'utf8'))
+      const left = release(claims, session)
+      if (Object.keys(left).length === Object.keys(claims).length) continue
+      const tmp = `${file}.${session.replace(/[^A-Za-z0-9-]/g, '')}-end.tmp`
+      writeFileSync(tmp, JSON.stringify(left))
+      renameSync(tmp, file)
+    } catch { /* fail open */ }
+  }
+}
+
+// a relative path with no cwd to resolve it against is skipped
+const absPatchFiles = (text, cwd) => patchFiles(text).flatMap(f => isAbsolute(f) ? [f] : cwd ? [resolve(cwd, f)] : [])
 
 const FAILED = /exit(?:ed)?(?: with)? code[:\s]+(\d+)/i
 // A hook refusal opens with its mod's name; done-check must not read it as a check result.
@@ -232,7 +301,9 @@ function postRows(p) {
 const STATE = join(homedir(), '.claude', 'switchboard', 'codex-hooks')
 
 /** Keeps what a turn did, per session, from PostToolUse: code mode hides the edits and commands from the rollout. */
-export function post(p, { dir = STATE } = {}) {
+export function post(p, { dir = STATE, home = homedir() } = {}) {
+  // code mode hides edits from PreToolUse, so a patch seen here still claims its files
+  if (p.tool_name === 'apply_patch') claimGuard(absPatchFiles(patchText(p.tool_input), p.cwd), p.session_id, home, { mode: 'stamp' })
   const rows = postRows(p)
   if (!rows.length || !p.session_id) return
   const file = join(dir, `${p.session_id}.jsonl`)
@@ -396,10 +467,13 @@ async function main() {
     } else if (p.hook_event_name === 'PostToolUse') {
       post(p)
     } else if (p.hook_event_name === 'Stop') {
-      const r = stop(p)
+      // A role run (engineer-codex, qa-codex) ends on its Report; the lead's done-check is not its own.
+      const r = process.env.SWITCHBOARD_ROLE_RUN ? undefined : stop(p)
       const tabs = tabsHold(p)
       const reason = [r?.reason, tabs].filter(Boolean).join('\n')
       if (reason) process.stdout.write(JSON.stringify({ decision: 'block', reason }))
+      // this hook gets no session end, so a role run frees its files here
+      else if (process.env.SWITCHBOARD_ROLE_RUN) releaseClaims(p.session_id, homedir())
     }
   } catch (e) {
     process.stderr.write(`codex-hooks: ${e?.message ?? e}\n`)

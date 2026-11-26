@@ -1,6 +1,6 @@
 ---
 name: performance-optimizer
-description: Performance analysis and optimization specialist. Use PROACTIVELY for identifying bottlenecks, optimizing slow code, reducing bundle sizes, and improving runtime performance. Profiling, memory leaks, render optimization, and algorithmic improvements.
+description: Finds and fixes slow code
 tools: Read, Write, Edit, Bash, Grep, Glob
 model: sonnet
 ---

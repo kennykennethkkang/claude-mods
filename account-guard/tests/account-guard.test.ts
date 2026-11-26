@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { clisOf, decide, foldersOf, type Data } from '../hooks/register.ts'
+import { clisOf, decide, foldersOf, signedOut, type Data } from '../hooks/register.ts'
 
 const H = '/Users/me'
 const G = `${H}/Documents/GitHub`
@@ -35,6 +35,11 @@ test('finds CLIs at command positions only', () => {
   expect(clisOf('env -i aws s3 ls', ids)).toEqual(['aws'])
   expect(clisOf('sudo -u x aws s3 ls', ids)).toEqual(['aws'])
   expect(clisOf('env -u HOME FOO=1 vercel ls', ids)).toEqual(['vercel'])
+})
+
+test('Windows absolute paths stay absolute and split the right project', () => {
+  const folders = foldersOf('cd C:\\Users\\me\\Documents\\GitHub\\Armasu && aws s3 ls', 'C:\\Users\\me', 'C:\\Users\\me')
+  expect(folders).toContain('C:/Users/me/Documents/GitHub/Armasu')
 })
 
 test('finds CLIs inside shell -c strings, eval and run-wrappers', () => {
@@ -185,7 +190,7 @@ test('web app CLI with no pick (null) asks and lists logins', () => {
 })
 
 const SB = `${H}/.claude/switchboard`
-function engine(on: Parameters<Parameters<typeof test>[1]>[1], cwd: string, ran: string[]) {
+function engine(on: Parameters<Parameters<typeof test>[1]>[1], cwd: string, ran: string[], text?: string) {
   const files: Record<string, string> = {
     [`${SB}/aws-prefs.json`]: JSON.stringify({ chrome: {}, projects: D.projects }),
     [`${SB}/logins.json`]: JSON.stringify({ apps: D.apps, links: D.links }),
@@ -195,7 +200,7 @@ function engine(on: Parameters<Parameters<typeof test>[1]>[1], cwd: string, ran:
   on('fs.read', (_, e) => (e.path in files ? { value: files[e.path] } : { deny: 'ENOENT' }))
   on('fs.list', (_, e) => ({ value: e.path === `${G}/Switchboard` ? [{ name: '.git', kind: 'dir' }] : [] }))
   on('session.cwd', () => ({ value: cwd }))
-  on('tool.call', (_, e) => { if (e.tool === 'Bash') ran.push(String(e.command)); return { result: {} } })
+  on('tool.call', (_, e) => { if (e.tool === 'Bash') ran.push(String(e.command)); return { result: {}, text } })
 }
 
 test('the hook rewrites aws and adds context', async ($, on) => {
@@ -206,6 +211,22 @@ test('the hook rewrites aws and adds context', async ($, on) => {
   expect(JSON.stringify(out)).toMatch(/account-guard/)
 })
 
+test('the hook says AWS is signed out when aws output shows an expired session', async ($, on) => {
+  engine(on, `${G}/Armasu`, [], "aws: [ERROR]: Your session has expired. Please reauthenticate using 'aws login'.")
+  const out = JSON.stringify(await $.tool.call({ tool: 'Bash', command: 'aws logs tail x' }))
+  expect(out).toMatch(/AWS is signed out for profile Armasu/)
+})
+
+test('the note also fires when the aws call names its own profile', async ($, on) => {
+  engine(on, `${G}/Armasu`, [], 'The SSO session associated with this profile has expired or is otherwise invalid. To refresh this SSO session run aws sso login with the corresponding profile.')
+  expect(JSON.stringify(await $.tool.call({ tool: 'Bash', command: 'aws sts get-caller-identity --profile Armasu' }))).toMatch(/AWS is signed out for profile Armasu/)
+})
+
+test('the hook stays quiet on a normal aws answer', async ($, on) => {
+  engine(on, `${G}/Armasu`, [], '{"Account": "1"}')
+  expect(JSON.stringify(await $.tool.call({ tool: 'Bash', command: 'aws sts get-caller-identity' }))).not.toMatch(/signed out/)
+})
+
 test('the hook denies with no pick and leaves other commands alone', async ($, on) => {
   const ran: string[] = []
   engine(on, `${G}/Switchboard/web/lib`, ran)
@@ -214,4 +235,31 @@ test('the hook denies with no pick and leaves other commands alone', async ($, o
   expect(JSON.stringify(out)).toContain(`<profile> ${G}/Switchboard\``)
   await $.tool.call({ tool: 'Bash', command: 'ls' })
   expect(ran).toEqual(['ls'])
+})
+
+test('spots an expired or missing AWS session in aws output', () => {
+  for (const t of [
+    "aws: [ERROR]: Your session has expired. Please reauthenticate using 'aws login'.",
+    "Your session has expired. Please reauthenticate using 'aws login'.",
+    'Error when retrieving token from sso: Token has expired and refresh failed',
+    'An error occurred (ExpiredToken) when calling the GetCallerIdentity operation: The security token included in the request is expired',
+    'An error occurred (ExpiredTokenException) when calling the ListBuckets operation: The security token included in the request is expired',
+    'aws: [ERROR]: An error occurred (ExpiredToken) when calling the GetCallerIdentity operation: The security token included in the request is expired',
+    'The SSO session associated with this profile has expired or is otherwise invalid. To refresh this SSO session run aws sso login with the corresponding profile.',
+    'Error loading SSO Token: Token for https://x.awsapps.com/start does not exist',
+    'aws: [ERROR]: An error occurred (NoCredentials): Unable to locate credentials. You can configure credentials by running "aws configure".',
+    'Unable to locate credentials. You can configure credentials by running "aws configure".',
+    'some earlier output\nUnable to locate credentials. You can configure credentials by running "aws configure".\n',
+  ]) expect(signedOut(t)).toBe(true)
+  expect(signedOut('{\n  "UserId": "AIDA123",\n  "Account": "123456789012",\n  "Arn": "arn:aws:iam::123456789012:user/x"\n}')).toBe(false)
+  expect(signedOut('')).toBe(false)
+  for (const t of [
+    '2026-11-21T10:00:00 app: user token has expired, refreshing',
+    '{"message":"session has expired"}',
+    '2026-11-21 WARN worker: Unable to locate credentials for tenant 4',
+    'echo "An error occurred (ExpiredToken) when calling"',
+    'Unable to locate credentials for tenant 4',
+    'Error loading SSO Token: worker log quoted this',
+    'An error occurred (ExpiredToken) when calling my wrapper',
+  ]) expect(signedOut(t)).toBe(false)
 })

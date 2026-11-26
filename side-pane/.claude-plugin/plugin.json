@@ -1,0 +1,8 @@
+{
+  "name": "side-pane",
+  "version": "0.1.5",
+  "description": "A pane beside the chat with Claude and Codex usage, running subagents by role, what waits on you, Smart picks and the mods that are on",
+  "author": { "name": "Kenneth Kang" },
+  "license": "MIT",
+  "types": "./types/index.d.ts"
+}

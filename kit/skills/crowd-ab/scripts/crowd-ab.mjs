@@ -163,8 +163,29 @@ const optText = o => {
   return /\.html?$/i.test(o) ? t.replace(/<(script|style)[\s\S]*?<\/\1>/gi, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() : t
 }
 
+// Same run files jev.py writes, so Switchboard's Crowd A/B card follows the haiku panel too.
+const LIVE = path.join(os.homedir(), '.claude', 'switchboard', 'jev')
+function liveStart(n, call) {
+  if (!fs.existsSync(path.dirname(LIVE))) return null
+  try {
+    fs.mkdirSync(LIVE, { recursive: true })
+    const file = path.join(LIVE, `${Date.now()}-${process.pid}.jsonl`)
+    const live = { file, call }
+    liveWrite(live, { t: 'start', run: path.basename(file, '.jsonl'), cmd: 'panel', preset: 'crowd-ab', items: n, display: [], at: Date.now() })
+    return live
+  } catch { return null }
+}
+function liveWrite(live, row) {
+  if (live) try { fs.appendFileSync(live.file, JSON.stringify(row) + '\n') } catch {}
+}
+
 const JEV = path.join(os.homedir(), '.claude/skills/claude-x-jev/scripts/jev.py')
-const jevUp = () => fs.existsSync(JEV) && spawnSync('python3', [JEV, 'status'], { encoding: 'utf8', timeout: 30000 }).status === 0
+export function pythonRun(args, options, run = spawnSync, platform = process.platform) {
+  if (platform !== 'win32') return run('python3', args, options)
+  const result = run('py', ['-3', ...args], options)
+  return result.error?.code === 'ENOENT' ? run('python', args, options) : result
+}
+const jevUp = () => fs.existsSync(JEV) && pythonRun([JEV, 'status'], { encoding: 'utf8', timeout: 30000 }).status === 0
 
 // Jev's choice over shown options is ~99% "first" (2026-11 run), so each option is rated alone:
 // one item per persona per option, no position to be biased by.
@@ -174,7 +195,7 @@ function preset() {
   return {
     name: 'crowd-ab', description: 'One synthetic user rates one option.', model: 'typesafe/jev-1.13',
     state_fields: ['persona', 'goal', 'option'],
-    display_fields: ['p', 'o', ...Object.keys(DIMS)],
+    display_fields: ['p', 'o', 'label', 'call', ...Object.keys(DIMS)],
     questions: {
       appeal: {
         type: 'score',
@@ -203,18 +224,19 @@ export function votesFromRatings(rows, k) {
   })
 }
 
-function runJev(ps, texts, goal, dir, tag) {
-  const items = ps.flatMap(p => texts.map((t, o) => ({ _id: `${p.id}:${o}`, p: p.id, o, persona: p.text, goal, option: t, ...p.seg })))
+// label and call ride along so Switchboard's live card can name options and join the pilot to the rest.
+function runJev(ps, texts, labels, call, goal, dir, tag) {
+  const items = ps.flatMap(p => texts.map((t, o) => ({ _id: `${p.id}:${o}`, p: p.id, o, label: labels[o], call, persona: p.text, goal, option: t, ...p.seg })))
   const inp = path.join(dir, `items-${tag}.jsonl`), out = path.join(dir, `jev-${tag}.jsonl`)
   fs.writeFileSync(inp, items.map(x => JSON.stringify(x)).join('\n'))
-  const r = spawnSync('python3', [JEV, 'ask', '--preset', path.join(dir, 'preset.json'), '--input', inp, '--out', out], { encoding: 'utf8', stdio: ['ignore', 'inherit', 'inherit'] })
+  const r = pythonRun([JEV, 'ask', '--preset', path.join(dir, 'crowd-ab.json'), '--input', inp, '--out', out], { encoding: 'utf8', stdio: ['ignore', 'inherit', 'inherit'] })
   if (r.status !== 0) throw new Error('jev.py failed')
   const rows = fs.readFileSync(out, 'utf8').trim().split('\n').map(l => JSON.parse(l))
   const cost = rows.reduce((s, x) => s + (x._cost || 0), 0)
   return { votes: votesFromRatings(rows, texts.length), cost, errors: rows.filter(x => x._error).length }
 }
 
-async function runPanel(ps, texts, labels, goal) {
+async function runPanel(ps, texts, labels, goal, live = null) {
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'crowd-ab-'))
   const one = p => new Promise(res => {
     const shown = p.order.map((o, j) => `${SLOTS[j]}: ${texts[o]}`).join('\n\n')
@@ -230,10 +252,15 @@ async function runPanel(ps, texts, labels, goal) {
     if (outs.some(o => /hit your/i.test(o))) { console.error('usage limit hit, stopping panel'); break }
     outs.forEach((o, j) => {
       const m = o.match(/\{[\s\S]*\}/)
-      try { const v = JSON.parse(m[0]); const p = ps[i + j]; votes.push({ pick: decode(v.pick, p.order), slot: v.pick, reason: REASONS[v.reason] ? v.reason : 'none', why: v.why, seg: p.seg }) } catch {}
+      try {
+        const v = JSON.parse(m[0]), p = ps[i + j], vote = { pick: decode(v.pick, p.order), slot: v.pick, reason: REASONS[v.reason] ? v.reason : 'none', why: v.why, seg: p.seg }
+        votes.push(vote)
+        liveWrite(live, { t: 'd', at: Date.now(), pick: vote.pick === 'none' ? 'none' : labels[vote.pick], reason: vote.reason, why: String(v.why ?? '').slice(0, 160), show: { p: String(p.id), call: live?.call, ...p.seg } })
+      } catch {}
     })
   }
   fs.rmSync(cwd, { recursive: true, force: true })
+  liveWrite(live, { t: 'end', at: Date.now() })
   return votes
 }
 
@@ -244,26 +271,27 @@ async function main() {
   const dir = a.out || fs.mkdtempSync(path.join(os.tmpdir(), 'crowd-ab-run-'))
   fs.mkdirSync(dir, { recursive: true })
   const usePanel = a.panel || !jevUp()
+  const call = `${Date.now()}-${process.pid}`
   const n = a.n ?? (usePanel ? 30 : 1000)
   const ps = personas(n, a.seed, texts.length, a.device)
   if (usePanel) {
     console.log(`Jev ${a.panel ? 'skipped' : 'unavailable'}: haiku panel of ${n} via claude -p (subscription usage, no $ cost).`)
     if (a.dryRun) return
-    const votes = await runPanel(ps, texts, labels, a.goal)
+    const votes = await runPanel(ps, texts, labels, a.goal, liveStart(n, call))
     fs.writeFileSync(path.join(dir, 'votes.json'), JSON.stringify(votes, null, 1))
     console.log(report(aggregate(votes, labels), labels))
     for (const v of votes.slice(0, 5)) if (v.why) console.log(`  "${v.why}"`)
     return
   }
-  fs.writeFileSync(path.join(dir, 'preset.json'), JSON.stringify(preset(), null, 1))
+  fs.writeFileSync(path.join(dir, 'crowd-ab.json'), JSON.stringify(preset(), null, 1))
   console.log(`Estimate before pilot: ${n * texts.length} calls x ~$${GUESS_PER_CALL} = ~$${(n * texts.length * GUESS_PER_CALL).toFixed(3)} (cap $${a.cap})`)
   if (a.dryRun) return
   const pilotN = Math.min(10, n)
-  const pilot = runJev(ps.slice(0, pilotN), texts, a.goal, dir, 'pilot')
+  const pilot = runJev(ps.slice(0, pilotN), texts, labels, call, a.goal, dir, 'pilot')
   const est = pilot.cost / pilotN * n
   console.log(`Pilot: ${pilotN} personas cost $${pilot.cost.toFixed(5)}; full run estimate $${est.toFixed(3)}`)
   if (est > a.cap) { console.log(`Over cap $${a.cap}; stopping. Lower --n or raise --cap.`); process.exit(2) }
-  const rest = n > pilotN ? runJev(ps.slice(pilotN), texts, a.goal, dir, 'main') : { votes: [], cost: 0, errors: 0 }
+  const rest = n > pilotN ? runJev(ps.slice(pilotN), texts, labels, call, a.goal, dir, 'main') : { votes: [], cost: 0, errors: 0 }
   const votes = [...pilot.votes, ...rest.votes]
   fs.writeFileSync(path.join(dir, 'votes.json'), JSON.stringify(votes))
   console.log(`Spent $${(pilot.cost + rest.cost).toFixed(4)}, ${pilot.errors + rest.errors} errors. Files in ${dir}`)

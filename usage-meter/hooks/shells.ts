@@ -1,10 +1,10 @@
 import type { EngineInterface } from 'claude-code'
 import { feed, runs } from './state'
 
-/** Background shells this chat started and has not seen end: Bash run_in_background, ended by TaskStop or its notification. */
+/** Background shells this chat started and has not seen end: Bash run_in_background, or any Bash moved there by its timeout (Code Mode's way), ended by TaskStop or its notification. */
 export function noteShell(tool: string, e: Record<string, unknown>, result: unknown, text: string) {
-  if (tool === 'Bash' && e.run_in_background === true) {
-    const r = (result ?? {}) as { backgroundTaskId?: unknown; backgroundOutputPath?: unknown }
+  const r = (result ?? {}) as { backgroundTaskId?: unknown; backgroundOutputPath?: unknown }
+  if (tool === 'Bash' && (e.run_in_background === true || typeof r.backgroundTaskId === 'string')) {
     const id = typeof r.backgroundTaskId === 'string' ? r.backgroundTaskId : /background with ID: (\S+?)\.?(?:\s|$)/.exec(text)?.[1]
     if (!id) return
     const output = typeof r.backgroundOutputPath === 'string' ? r.backgroundOutputPath : /Output is being written to: (\S+)/.exec(text)?.[1]

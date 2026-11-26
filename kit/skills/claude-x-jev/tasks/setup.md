@@ -41,6 +41,7 @@ Give these exact instructions and then wait:
    - Switchboard (preferred): Settings, Accounts, API keys, paste it under Jev / OpenRouter, press Save. It goes to the macOS Keychain and Test shows it works; no restart needed
    - macOS / Linux without Switchboard: append `export OPENROUTER_API_KEY=sk-or-v1-...` to `~/.zshrc` or `~/.bashrc`, then `source` that file
    - Windows: `setx OPENROUTER_API_KEY "sk-or-v1-..."` in PowerShell, then open a new terminal
+   - On Windows, the gate needs Git Bash, and its key comes from that shell's environment
 5. Restart Claude Code so its Bash tool inherits the variable
 
 Wait for the user to say the key is in place. Do not ask them to paste it.

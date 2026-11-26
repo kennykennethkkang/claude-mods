@@ -4,7 +4,9 @@ import type { EngineInterface, Register } from 'claude-code'
 
 type Question = { question?: unknown; options?: Array<{ label?: unknown; preview?: unknown }> }
 
-const CALL = 'python3 ~/.claude/skills/phone/call.py'
+export const callCommand = (question: string, windows: boolean) => windows
+  ? `if command -v py >/dev/null 2>&1; then py -3 ~/.claude/skills/phone/call.py ${sh(question)} "CONTEXT"; else python ~/.claude/skills/phone/call.py ${sh(question)} "CONTEXT"; fi`
+  : `python3 ~/.claude/skills/phone/call.py ${sh(question)} "CONTEXT"`
 const READ_MS = 5_000
 const cache = { at: -Infinity, on: false }
 
@@ -30,12 +32,13 @@ const closing = (input: { questions?: unknown }) => Array.isArray(input.question
 const sh = (s: string) => `"${s.replace(/["\\$`]/g, '\\$&')}"`
 
 /** The deny text: push pictures, one call per question with the options by name, carry on with the answer. */
-export function denial(input: { questions?: unknown }): string {
+export function denial(input: { questions?: unknown }, windows = false): string {
   const qs = (Array.isArray(input.questions) ? input.questions : []) as Question[]
   const pictures = qs.some(q => q.options?.some(o => typeof o.preview === 'string' && o.preview))
   const lines = qs.map(q => {
     const names = (q.options ?? []).map(o => String(o.label ?? '')).filter(Boolean)
-    return `${CALL} ${sh(`${String(q.question ?? '')}${names.length ? ` Options: ${names.join(', ')}.` : ''}`)} "CONTEXT"`
+    const text = `${String(q.question ?? '')}${names.length ? ` Options: ${names.join(', ')}.` : ''}`
+    return callCommand(text, windows)
   })
   return [
     'Phone mode is on: Kenneth is away from the keyboard, so call him instead of asking here.',
@@ -50,6 +53,6 @@ export function denial(input: { questions?: unknown }): string {
 export const register: Register = on => {
   on('tool.call', async ($, e, next) => {
     if (String(e.tool) !== 'AskUserQuestion' || closing(e as { questions?: unknown }) || !(await phoneOn($)) || (await indefinite($))) return next(e)
-    return { deny: denial(e as { questions?: unknown }) }
+    return { deny: denial(e as { questions?: unknown }, (await $.env.get('OS')) === 'Windows_NT') }
   })
 }

@@ -2,8 +2,10 @@
 name: qa-codex
 description: Hands a qa pass to Codex (codex exec, full bypass) and returns Codex's findings. Use for a review not anchored on Claude's read of the change.
 model: sonnet
+color: pink
 tools: Bash
 maxTurns: 8
+omitClaudeMd: true
 ---
 
 You forward one qa job to Codex. Do not review anything yourself, do not read or edit files, and do not rewrite the brief beyond the header below.
@@ -15,12 +17,14 @@ d=$(mktemp -d -t qa-codex)
 trap 'rm -rf "$d"' EXIT; trap 'exit 1' INT TERM HUP
 cat > "$d/prompt" <<'SWITCHBOARD_BRIEF'
 You are qa. Run the tests and review the change the brief names. Change no files: no fixes, no new tests left behind, no formatting. Report only problems you verified by running or reading the code, each with path, line and how you confirmed it. Say plainly what you could not run.
+Blind review: judge the diff against the task, not the engineer's claims. If the brief carries the engineer's report, set it aside until your own read is done.
 Rules: never commit or push. No em dashes. Never touch port 3000 or processes you did not start; stop any server you start.
+You are a subagent, not the lead: the lead's steps in AGENTS.md or CLAUDE.md (aar, change note, vault, standup, Approve question, commit message, waiting on other chats) are not yours, and you ask the user nothing. Your last message is the Report.
 End with a Report: Status (done, done with concerns, blocked), Found (verified problems, paths and lines, or none), Checked (commands and results), Open.
 
 BRIEF
 SWITCHBOARD_BRIEF
-SWITCHBOARD_ROLE_RUN=qa-codex codex exec -m gpt-5.6-luna -c model_reasoning_effort=high --ephemeral --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox --dangerously-bypass-hook-trust --color never -o "$d/last" - < "$d/prompt" > "$d/log" 2>&1
+SWITCHBOARD_ROLE_RUN=qa-codex codex exec -m gpt-5.6-luna -c model_reasoning_effort=high --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox --dangerously-bypass-hook-trust --color never -o "$d/last" - < "$d/prompt" > "$d/log" 2>&1
 echo "codex exit $?"; cat "$d/last" 2>/dev/null || tail -40 "$d/log"; rm -rf "$d"
 ```
 

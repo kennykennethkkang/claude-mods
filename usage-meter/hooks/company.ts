@@ -20,8 +20,9 @@ export async function readCompany($: EngineInterface) {
     company.paused = f.paused === true
     company.budgets = f.budgets && typeof f.budgets === 'object' ? f.budgets : {}
     company.smart = f.smartModelSwitch !== false
+    company.codexFirst = f.codexFirst !== false
     company.advanced = f.advancedMode && typeof f.advancedMode === 'object' ? f.advancedMode : {}
-  } catch { company.paused = false; company.budgets = {}; company.smart = true; company.advanced = {} }
+  } catch { company.paused = false; company.budgets = {}; company.smart = true; company.codexFirst = true; company.advanced = {} }
   try {
     const l = JSON.parse(String(await $.fs.read(`${home}/.claude/switchboard/limits.json`)))
     company.limit = l.paused === true && l.pause && typeof l.pause === 'object' ? l.pause : undefined
@@ -29,6 +30,10 @@ export async function readCompany($: EngineInterface) {
     company.pauseAt = l.pauseAt === null ? null : typeof l.pauseAt === 'number' ? l.pauseAt : undefined
     company.pauseOff = typeof l.pauseOff === 'number' ? l.pauseOff : -Infinity
   } catch { company.limit = undefined; company.windows = []; company.pauseAt = undefined; company.pauseOff = -Infinity }
+  try {
+    const l = JSON.parse(String(await $.fs.read(`${home}/.claude/switchboard/codex-limits.json`)))
+    company.codexWindows = Array.isArray(l.windows) ? l.windows : []
+  } catch { company.codexWindows = [] }
   return company
 }
 export async function startsToday($: EngineInterface) {
